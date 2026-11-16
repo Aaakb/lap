@@ -6,7 +6,7 @@ public partial class ResultsEntryWindow : Window
  private readonly int orderId;
  private readonly List<PendingTestRow> rows;
  public bool Saved {get;private set;}
- public ResultsEntryWindow(LabOrder order,IEnumerable<PendingTestRow> pending) {orderId=order.Id;rows=pending.ToList();InitializeComponent();PatientTitle.Text=$"المريض: {order.PatientName} — طلب {order.Id}";Entries.ItemsSource=rows;Closing+=ConfirmDiscard;}
+ public ResultsEntryWindow(LabOrder order,IEnumerable<PendingTestRow> pending) {orderId=order.Id;rows=pending.ToList();InitializeComponent();PatientTitle.Text=$"المراجع: {order.PatientName} — طلب {order.PatientOrderNumber}";Entries.ItemsSource=rows;Closing+=ConfirmDiscard;}
  private void Save(object sender,RoutedEventArgs e)
  {
   Entries.CommitEdit(DataGridEditingUnit.Cell,true);Entries.CommitEdit(DataGridEditingUnit.Row,true);

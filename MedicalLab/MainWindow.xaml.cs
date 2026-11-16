@@ -42,21 +42,21 @@ public partial class MainWindow : Window
   var sex=(SexInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? ""; Patient.ValidateRequired(NameInput.Text,BirthInput.SelectedDate,sex);
   var input=Patient.Create(NameInput.Text,BirthInput.SelectedDate,sex);
   using var db=new LabContext();
-  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المريض غير موجود."); current.Name=input.Name;current.BirthDate=input.BirthDate;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
+  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المراجع غير موجود."); current.Name=input.Name;current.BirthDate=input.BirthDate;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
   db.SaveChanges(); return input;
  }
  private void AddPatient(object sender,RoutedEventArgs e)
  {
-  try { SavePatient(); NewPatient(null,null); RefreshAll(); } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ المريض.","تنبيه");}
+  try { SavePatient(); NewPatient(null,null); RefreshAll(); } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ المراجع.","تنبيه");}
  }
  private void SavePatientAndOrder(object sender,RoutedEventArgs e)
  {
   try {var patient=SavePatient(); NewPatient(null,null); CreateOrderFor(patient);}
-  catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر إكمال العملية. تحقق من قائمة المرضى قبل إعادة المحاولة.","تنبيه");}
+  catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر إكمال العملية. تحقق من قائمة المراجعين قبل إعادة المحاولة.","تنبيه");}
  }
  private void SelectedPatientOrder(object sender,RoutedEventArgs e)
  {
-  if(PatientsGrid.SelectedItem is not Patient patient) {MessageBox.Show("اختر المريض من القائمة أولاً.");return;}
+  if(PatientsGrid.SelectedItem is not Patient patient) {MessageBox.Show("اختر المراجع من القائمة أولاً.");return;}
   try {CreateOrderFor(patient);} catch(Exception) {MessageBox.Show("تعذر إنشاء الطلب.");}
  }
  private void CreateOrderFor(Patient patient)
@@ -95,13 +95,13 @@ public partial class MainWindow : Window
  }
  private void SaveResult(object sender,RoutedEventArgs e)
  {
-  if(PatientChoice.SelectedItem is not Patient patient || TestChoice.SelectedItem is not string name || string.IsNullOrWhiteSpace(ValueInput.Text)) { MessageBox.Show("اختر المريض والتحليل وأدخل النتيجة."); return; }
+  if(PatientChoice.SelectedItem is not Patient patient || TestChoice.SelectedItem is not string name || string.IsNullOrWhiteSpace(ValueInput.Text)) { MessageBox.Show("اختر المراجع والتحليل وأدخل النتيجة."); return; }
   try {
    using var db=new LabContext();
    var order=OrderChoice.SelectedItem as LabOrder;
    int orderId;
    if(order is null) orderId=OrderWorkflow.CreateOrderWithResult(db,patient.Id,name,ValueInput.Text);
-   else {if(order.PatientId!=patient.Id) throw new ArgumentException("اختر طلباً يخص المريض."); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text);orderId=order.Id;}
+   else {if(order.PatientId!=patient.Id) throw new ArgumentException("اختر طلباً يخص المراجع."); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text);orderId=order.Id;}
    ValueInput.Clear();RefreshAll();OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==orderId);TestChoice.SelectedItem=null; TestChoice.Focus();
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException or InvalidOperationException ? ex.Message : "تعذر حفظ النتيجة."); }
  }
@@ -132,7 +132,7 @@ public partial class MainWindow : Window
  }
  private void NewOrder(object sender,RoutedEventArgs e)
  {
-  if(PatientChoice.SelectedItem is not Patient patient) { MessageBox.Show("اختر المريض أولاً."); return; }
+  if(PatientChoice.SelectedItem is not Patient patient) { MessageBox.Show("اختر المراجع أولاً."); return; }
   try { using var db=new LabContext(); var order=new LabOrder { PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now }; db.LabOrders.Add(order); db.SaveChanges(); RefreshAll(); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==order.Id); }
   catch(Exception) { MessageBox.Show("تعذر إنشاء الطلب."); }
  }
@@ -188,7 +188,7 @@ public partial class MainWindow : Window
   try {
    var order=SelectedOrder(); using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderBy(r=>r.Id).ToList();
    var document=LabReport.Build(db.Settings.AsNoTracking().Single(),order,rows);
-   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=ReportFileName.Create(rows[0].PatientName,order.Id)}; if(dialog.ShowDialog()!=true) return;
+   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=ReportFileName.Create(rows[0].PatientName,order.PatientOrderNumber)}; if(dialog.ShowDialog()!=true) return;
    LabReport.SavePdf(document,dialog.FileName); MessageBox.Show("تم حفظ تقرير PDF.");
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ التقرير. تحقق من أن الملف غير مفتوح ومن صلاحيات المجلد."); }
  } private void RemovePending(object sender,RoutedEventArgs e)
@@ -213,9 +213,9 @@ public partial class MainWindow : Window
  private void UpdateResultDetails(object? sender,SelectionChangedEventArgs? e)
  {
   if(!ready || ResultDetails is null) return;
-  if(PatientChoice.SelectedItem is not Patient selectedPatient || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر المريض والتحليل لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  if(PatientChoice.SelectedItem is not Patient selectedPatient || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر المراجع والتحليل لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   using var db=new LabContext(); var patient=db.Patients.AsNoTracking().SingleOrDefault(p=>p.Id==selectedPatient.Id);
-  if(patient is null) {ResultDetails.Text="بيانات المريض غير موجودة.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  if(patient is null) {ResultDetails.Text="بيانات المراجع غير موجودة.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,(OrderChoice.SelectedItem as LabOrder)?.CreatedAt.Date ?? DateTime.Today);
   if(range is null) {ResultDetails.Text="لا يوجد نطاق مطابق؛ تحقق من تاريخ الميلاد والجنس ونطاقات التحليل.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   ResultDetails.FlowDirection=FlowDirection.LeftToRight;
@@ -223,7 +223,7 @@ public partial class MainWindow : Window
  } private void ChooseTests(object sender,RoutedEventArgs e)
  {
   try {
-   if(PatientChoice.SelectedItem is not Patient patient) throw new ArgumentException("اختر المريض أولاً.");
+   if(PatientChoice.SelectedItem is not Patient patient) throw new ArgumentException("اختر المراجع أولاً.");
    using var db=new LabContext();var selectedOrder=OrderChoice.SelectedItem as LabOrder;
    if(selectedOrder is not null) OrderWorkflow.RequireDraft(db.LabOrders.Find(selectedOrder.Id)!);
    var tests=db.LabTests.AsNoTracking().Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();
@@ -238,9 +238,9 @@ public partial class MainWindow : Window
  }
  private void PatientHistory(object sender,RoutedEventArgs e)
  {
-  if(PatientsGrid.SelectedItem is not Patient patient){MessageBox.Show("اختر المريض أولاً.");return;}
+  if(PatientsGrid.SelectedItem is not Patient patient){MessageBox.Show("اختر المراجع أولاً.");return;}
   Tabs.SelectedItem=ResultsTab;RefreshAll();PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).FirstOrDefault(p=>p.Id==patient.Id);
-  if(OrderChoice.Items.Count>0)OrderChoice.SelectedIndex=0;else MessageBox.Show("لا توجد طلبات سابقة لهذا المريض.");
+  if(OrderChoice.Items.Count>0)OrderChoice.SelectedIndex=0;else MessageBox.Show("لا توجد طلبات سابقة لهذا المراجع.");
  } private void PendingRowSelected(object sender,SelectionChangedEventArgs e)
  {
   if(!ready || PendingGrid.SelectedItem is not PendingTestRow row) return;

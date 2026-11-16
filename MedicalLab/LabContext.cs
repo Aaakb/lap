@@ -20,6 +20,15 @@ public class LabContext : DbContext
   Directory.CreateDirectory(directory);
   options.UseSqlite(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder { DataSource = databasePath ?? Path.Combine(directory, "lab.db") }.ToString());
  }
+ public override int SaveChanges()
+ {
+  var additions=ChangeTracker.Entries<LabOrder>().Where(e=>e.State==EntityState.Added && e.Entity.PatientOrderNumber==0).Select(e=>e.Entity).ToList();
+  foreach(var group in additions.GroupBy(o=>o.PatientId)) {
+   var last=LabOrders.Where(o=>o.PatientId==group.Key).Select(o=>(int?)o.PatientOrderNumber).Max() ?? 0;
+   foreach(var order in group) order.PatientOrderNumber=++last;
+  }
+  return base.SaveChanges();
+ }
  public void Initialize()
  {
   Database.EnsureCreated();
@@ -35,6 +44,9 @@ public class LabContext : DbContext
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS PlannedTests (Id INTEGER PRIMARY KEY AUTOINCREMENT, LabOrderId INTEGER NOT NULL, TestName TEXT NOT NULL)");
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS AuditEntries (Id INTEGER PRIMARY KEY AUTOINCREMENT, At TEXT NOT NULL, Action TEXT NOT NULL, OrderId INTEGER NOT NULL)");
   AddColumnIfMissing("LabOrders","Approved","INTEGER NOT NULL DEFAULT 0");
+  AddColumnIfMissing("LabOrders","PatientOrderNumber","INTEGER NOT NULL DEFAULT 0");
+  Database.ExecuteSqlRaw("UPDATE LabOrders SET PatientOrderNumber=(SELECT COUNT(*) FROM LabOrders AS prior WHERE prior.PatientId=LabOrders.PatientId AND prior.Id<=LabOrders.Id) WHERE PatientOrderNumber=0");
+  Database.ExecuteSqlRaw("CREATE UNIQUE INDEX IF NOT EXISTS IX_LabOrders_Patient_Number ON LabOrders(PatientId,PatientOrderNumber)");
   AddColumnIfMissing("LabTests","IsText","INTEGER NOT NULL DEFAULT 0");
   AddColumnIfMissing("LabTests","ExpectedText","TEXT NOT NULL DEFAULT ''");
   AddColumnIfMissing("LabResults","IsText","INTEGER NOT NULL DEFAULT 0");

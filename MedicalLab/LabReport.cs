@@ -20,7 +20,7 @@ public static class LabReport
   doc.Blocks.Add(new Paragraph(new Run(settings.Name)) {FontSize=28,FontWeight=FontWeights.Bold,Foreground=new SolidColorBrush(Color.FromRgb(21,86,90))});
   doc.Blocks.Add(new Paragraph(new Run(settings.Address+"   "+settings.Phone)) {FontSize=15,Foreground=Brushes.DimGray,Margin=new Thickness(0,0,0,12)});
   doc.Blocks.Add(new Paragraph(new Run("تقرير تجريبي - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});
-  doc.Blocks.Add(new Paragraph(new Run($"طلب {order.Id} | {(order.Approved?"معتمد":"مسودة غير معتمدة")} | {order.CreatedAt:yyyy-MM-dd HH:mm}\nالمريض: {first.PatientName} | الجنس: {Patient.SexInEnglish(first.PatientSex)} | الميلاد: {first.BirthDate:yyyy-MM-dd}")) { FontSize=16, LineHeight=27, Background=new SolidColorBrush(Color.FromRgb(245,249,249)), Padding=new Thickness(12), Margin=new Thickness(0,12,0,18) });
+  doc.Blocks.Add(new Paragraph(new Run($"طلب {order.PatientOrderNumber} | {order.CreatedAt:yyyy-MM-dd}\nالمراجع: {first.PatientName} | الجنس: {Patient.SexInEnglish(first.PatientSex)} | الميلاد: {first.BirthDate:yyyy-MM-dd}")) { FontSize=16, LineHeight=27, Background=new SolidColorBrush(Color.FromRgb(245,249,249)), Padding=new Thickness(12), Margin=new Thickness(0,12,0,18) });
   var table=new Table {CellSpacing=0,FlowDirection=FlowDirection.LeftToRight,TextAlignment=TextAlignment.Left}; foreach(var width in new[]{2.5,1.3,1.1,1.8,1.7}) table.Columns.Add(new TableColumn {Width=new GridLength(width,GridUnitType.Star)});
   var group=new TableRowGroup(); table.RowGroups.Add(group); AddRow(group,new[]{"Test","Result","Unit","Reference","Flag"},true);
   foreach(var r in rows) AddRow(group,new[]{r.TestName,r.ValueDisplay,r.Unit,r.ReferenceDisplay,r.FlagDisplay},false);

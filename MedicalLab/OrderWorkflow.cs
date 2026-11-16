@@ -29,7 +29,7 @@ public static class OrderWorkflow
  public static int CreateOrderWithResult(LabContext db,int patientId,string name,string input)
  {
   using var transaction=db.Database.BeginTransaction();
-  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المريض أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();SaveResultCore(db,order.Id,name,input);transaction.Commit();return order.Id;}
+  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المراجع أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();SaveResultCore(db,order.Id,name,input);transaction.Commit();return order.Id;}
   catch {transaction.Rollback();db.ChangeTracker.Clear();throw;}
  }
  public static void SaveResult(LabContext db,int orderId,string name,string input)
@@ -46,7 +46,7 @@ public static class OrderWorkflow
   var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("الطلب غير موجود."); RequireDraft(order);
   var patient=db.Patients.AsNoTracking().Single(p=>p.Id==order.PatientId);
   var ranges=db.LabTests.AsNoTracking().Where(t=>t.Name==name && t.Active).ToList();
-  var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date) ?? throw new ArgumentException("لا يوجد نطاق واحد مطابق لعمر المريض في تاريخ الطلب وجنسه.");
+  var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date) ?? throw new ArgumentException("لا يوجد نطاق واحد مطابق لعمر المراجع في تاريخ الطلب وجنسه.");
   var ids=db.OrderResults.Where(x=>x.LabOrderId==orderId).Select(x=>x.LabResultId);
   if(db.LabResults.Any(r=>ids.Contains(r.Id) && r.TestName==name)) throw new ArgumentException("يوجد لهذا التحليل نتيجة بالفعل. احذف النتيجة السابقة من المسودة قبل تصحيحها.");
   var result=ResultEntry.Create(range,input); result.PatientId=patient.Id; result.PatientName=patient.Name; result.PatientSex=patient.Sex; result.BirthDate=patient.BirthDate; result.CreatedAt=DateTime.Now;
@@ -57,7 +57,7 @@ public static class OrderWorkflow
  public static int CreateOrderWithTests(LabContext db,int patientId,IEnumerable<string> selected)
  {
   using var transaction=db.Database.BeginTransaction();
-  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المريض أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();PlanTestsCore(db,order.Id,selected);transaction.Commit();return order.Id;}
+  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المراجع أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();PlanTestsCore(db,order.Id,selected);transaction.Commit();return order.Id;}
   catch {transaction.Rollback();db.ChangeTracker.Clear();throw;}
  }
  public static void PlanTests(LabContext db,int orderId,IEnumerable<string> selected)
