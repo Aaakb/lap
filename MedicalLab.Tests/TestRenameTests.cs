@@ -55,6 +55,37 @@ public class TestRenameTests
     }
 
     [Fact]
+    public void ReusingAFormerNameDoesNotConfuseDifferentTestIdentities()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rename-reuse-{Guid.NewGuid()}.db");
+        try
+        {
+            using var db = new LabContext(path);
+            db.Initialize();
+            var patient = Patient.Create("مراجع", new DateTime(2000, 1, 1), "ذكر");
+            db.Patients.Add(patient);
+            db.SaveChanges();
+            var order = OrderWorkflow.CreateOrderWithResult(db, patient.Id, "Glucose (DEMO)", "22");
+            var range = db.LabTests.AsNoTracking().First(t => t.Name == "Glucose (DEMO)");
+            range.Name = "Glucose";
+            TestCatalog.Save(db, range.Id, range);
+            TestCatalog.Save(db, null, new LabTest { Name = "Glucose (DEMO)", Unit = "new unit", MaxAge = 120, High = 100 });
+            OrderWorkflow.PlanTests(db, order, new[] { "Glucose (DEMO)" });
+
+            OrderWorkflow.SaveResult(db, order, "Glucose (DEMO)", "30");
+
+            Assert.Equal(2, db.LabResults.Count());
+            Assert.Equal(2, db.LabResults.Select(r => r.TestKey).Distinct().Count());
+            OrderWorkflow.SetApproval(db, order, true);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void LegacyRecordsReceiveStableKeysBeforeRename()
     {
         var path = Path.Combine(Path.GetTempPath(), $"rename-legacy-{Guid.NewGuid()}.db");

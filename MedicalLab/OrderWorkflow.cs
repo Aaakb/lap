@@ -56,10 +56,10 @@ public static class OrderWorkflow
   var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date) ?? throw new ArgumentException("لا يوجد نطاق واحد مطابق لعمر المراجع في تاريخ الطلب وجنسه.");
   var ids=db.OrderResults.Where(x=>x.LabOrderId==orderId).Select(x=>x.LabResultId);
   var key=TestIdentity.Key(range.TestKey,name);
-  if(db.LabResults.Any(r=>ids.Contains(r.Id) && (r.TestName==name || r.TestKey==key))) throw new ArgumentException("يوجد لهذا التحليل نتيجة بالفعل. احذف النتيجة السابقة من المسودة قبل تصحيحها.");
+  if(db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).Select(r=>new{r.TestKey,r.TestName}).AsEnumerable().Any(r=>TestIdentity.Key(r.TestKey,r.TestName)==key)) throw new ArgumentException("يوجد لهذا التحليل نتيجة بالفعل. احذف النتيجة السابقة من المسودة قبل تصحيحها.");
   var result=ResultEntry.Create(range,input); result.PatientId=patient.Id; result.PatientName=patient.Name; result.PatientSex=patient.Sex; result.BirthDate=patient.BirthDate; result.CreatedAt=DateTime.Now;
   db.LabResults.Add(result); db.SaveChanges(); db.OrderResults.Add(new OrderResult {LabOrderId=orderId,LabResultId=result.Id});
-  if(!db.PlannedTests.Any(t=>t.LabOrderId==orderId && (t.TestName==name || t.TestKey==key))) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name,TestKey=key});
+  if(!db.PlannedTests.AsNoTracking().Where(t=>t.LabOrderId==orderId).AsEnumerable().Any(t=>TestIdentity.Key(t.TestKey,t.TestName)==key)) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name,TestKey=key});
   Log(db,orderId,"إضافة نتيجة: "+name); db.SaveChanges();
  }
  public static int CreateOrderWithTests(LabContext db,int patientId,IEnumerable<string> selected)
