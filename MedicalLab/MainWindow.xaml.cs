@@ -232,6 +232,8 @@ public partial class MainWindow : Window
    if(selectedOrder is null) orderId=OrderWorkflow.CreateOrderWithTests(db,patient.Id,dialog.SelectedTests);
    else {orderId=selectedOrder.Id;OrderWorkflow.PlanTests(db,orderId,dialog.SelectedTests);}
    RefreshAll(); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==orderId);
+   if(PendingGrid.ItemsSource is IEnumerable<PendingTestRow> pending && pending.Any()) OpenResultsEntry(sender,e);
+   else MessageBox.Show("التحاليل المحددة لها نتائج محفوظة بالفعل.");
   } catch(Exception ex){MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر إضافة التحاليل.");}
  }
  private void PatientHistory(object sender,RoutedEventArgs e)
