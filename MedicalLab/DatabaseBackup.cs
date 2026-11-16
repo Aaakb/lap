@@ -37,4 +37,5 @@ public class LabSettings
  public string Name {get;set;}="مختبر الأصمعي";
  public string Address {get;set;}="";
  public string Phone {get;set;}="";
+ public byte[]? Logo {get;set;}
 }

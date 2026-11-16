@@ -12,6 +12,11 @@ public static class LabReport
  {
   ReportSelection.Validate(rows); var first=rows.First();
   var doc=new FlowDocument {FlowDirection=FlowDirection.RightToLeft,FontFamily=new FontFamily("Segoe UI"),FontSize=13,PageWidth=793.7,PageHeight=1122.5,PagePadding=new Thickness(48),ColumnWidth=double.PositiveInfinity};
+  if(settings.Logo is { Length: > 0 }) {
+   var image=new BitmapImage(); using var source=new MemoryStream(settings.Logo); image.BeginInit(); image.CacheOption=BitmapCacheOption.OnLoad; image.StreamSource=source; image.EndInit(); image.Freeze();
+   var logo=new System.Windows.Controls.Image {Source=image,Width=95,Height=70,Stretch=Stretch.Uniform,HorizontalAlignment=HorizontalAlignment.Right};
+   doc.Blocks.Add(new BlockUIContainer(logo) {TextAlignment=TextAlignment.Right});
+  }
   doc.Blocks.Add(new Paragraph(new Run(settings.Name)) {FontSize=25,FontWeight=FontWeights.Bold,Foreground=new SolidColorBrush(Color.FromRgb(21,86,90))});
   doc.Blocks.Add(new Paragraph(new Run(settings.Address+"   "+settings.Phone)));
   doc.Blocks.Add(new Paragraph(new Run("تقرير تجريبي - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});

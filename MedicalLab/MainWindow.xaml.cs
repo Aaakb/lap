@@ -11,6 +11,7 @@ public partial class MainWindow : Window
  private int? patientEditingId;
  private int? panelEditingId;
  private bool ready;
+ private byte[]? pendingLogo;
  public MainWindow()
  {
   InitializeComponent();
@@ -24,7 +25,7 @@ public partial class MainWindow : Window
   var selectedTest=TestChoice.SelectedItem as string;
   PendingText.Text=""; PendingChoice.ItemsSource=null;
   using var db = new LabContext();
-  var settings=db.Settings.AsNoTracking().Single(); LabNameInput.Text=settings.Name; LabAddressInput.Text=settings.Address; LabPhoneInput.Text=settings.Phone;
+  var settings=db.Settings.AsNoTracking().Single(); LabNameInput.Text=settings.Name; LabAddressInput.Text=settings.Address; LabPhoneInput.Text=settings.Phone; pendingLogo=settings.Logo; LogoStatus.Text=pendingLogo is null ? "لا يوجد شعار" : "تم اختيار شعار";
   var panels=db.Panels.AsNoTracking().OrderBy(p=>p.Name).ToList(); PanelsGrid.ItemsSource=panels; PanelChoice.ItemsSource=panels; AuditGrid.ItemsSource=db.AuditEntries.AsNoTracking().OrderByDescending(a=>a.Id).Take(500).ToList();
   var patients = db.Patients.AsNoTracking().OrderByDescending(p=>p.Id).ToList();
   PatientsGrid.ItemsSource = patients; PatientChoice.ItemsSource = patients;
@@ -115,7 +116,7 @@ public partial class MainWindow : Window
  } private void SaveSettings(object sender,RoutedEventArgs e)
  {
   if(string.IsNullOrWhiteSpace(LabNameInput.Text)) { MessageBox.Show("أدخل اسم المختبر."); return; }
-  try { using var db=new LabContext(); var settings=db.Settings.Single(); settings.Name=LabNameInput.Text.Trim(); settings.Address=LabAddressInput.Text.Trim(); settings.Phone=LabPhoneInput.Text.Trim(); db.SaveChanges(); MessageBox.Show("تم حفظ الإعدادات."); } catch(Exception) { MessageBox.Show("تعذر حفظ الإعدادات."); }
+  try { using var db=new LabContext(); var settings=db.Settings.Single(); settings.Name=LabNameInput.Text.Trim(); settings.Address=LabAddressInput.Text.Trim(); settings.Phone=LabPhoneInput.Text.Trim(); settings.Logo=pendingLogo; db.SaveChanges(); MessageBox.Show("تم حفظ الإعدادات."); } catch(Exception) { MessageBox.Show("تعذر حفظ الإعدادات."); }
  }
  private void CreateBackup(object sender,RoutedEventArgs e)
  {
@@ -165,4 +166,14 @@ public partial class MainWindow : Window
  } private void RemovePending(object sender,RoutedEventArgs e)
  {
   RunAction(()=> { var order=SelectedOrder(); if(PendingChoice.SelectedItem is not string name) throw new ArgumentException("اختر التحليل المنتظر أولاً."); using var db=new LabContext(); OrderWorkflow.RequireDraft(db.LabOrders.Find(order.Id)!); var planned=db.PlannedTests.Single(t=>t.LabOrderId==order.Id && t.TestName==name); db.PlannedTests.Remove(planned); OrderWorkflow.Log(db,order.Id,"إزالة تحليل منتظر: "+name); db.SaveChanges(); });
- }}
+ } private void ChooseLogo(object sender,RoutedEventArgs e)
+ {
+  var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Image files|*.png;*.jpg;*.jpeg",CheckFileExists=true}; if(dialog.ShowDialog()!=true) return;
+  try {
+   var file=new System.IO.FileInfo(dialog.FileName); if(file.Length>2_000_000) throw new ArgumentException("حجم الصورة يجب ألا يتجاوز 2 MB.");
+   var bytes=System.IO.File.ReadAllBytes(dialog.FileName); using var stream=new System.IO.MemoryStream(bytes); var decoder=System.Windows.Media.Imaging.BitmapDecoder.Create(stream,System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+   if(decoder.Frames[0].PixelWidth>4000 || decoder.Frames[0].PixelHeight>4000) throw new ArgumentException("أبعاد الصورة أكبر من المسموح (4000 × 4000).");
+   pendingLogo=bytes; LogoStatus.Text="تم اختيار شعار — اضغط حفظ بيانات المختبر";
+  } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر قراءة الصورة. اختر ملف PNG أو JPEG صالحاً.");}
+ }
+ private void RemoveLogo(object sender,RoutedEventArgs e) {pendingLogo=null;LogoStatus.Text="ستُزال الصورة عند حفظ بيانات المختبر";}}

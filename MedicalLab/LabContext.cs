@@ -24,6 +24,7 @@ public class LabContext : DbContext
  {
   Database.EnsureCreated();
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Address TEXT NOT NULL, Phone TEXT NOT NULL)");
+  AddColumnIfMissing("Settings","Logo","BLOB NULL");
   if(!Settings.Any()) { Settings.Add(new LabSettings()); SaveChanges(); }
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS LabOrders (Id INTEGER PRIMARY KEY AUTOINCREMENT, PatientId INTEGER NOT NULL, PatientName TEXT NOT NULL, CreatedAt TEXT NOT NULL)");
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS OrderResults (Id INTEGER PRIMARY KEY AUTOINCREMENT, LabOrderId INTEGER NOT NULL, LabResultId INTEGER NOT NULL)");
