@@ -253,7 +253,7 @@ public partial class MainWindow : Window
  {
   if(!ready || updatingPatients) return;
   using var db=new LabContext(); var orders=OrderWorkflow.OrdersForPatient(db,(PatientChoice.SelectedItem as Patient)?.Id);
-  OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=null; ResultsGrid.ItemsSource=null; PendingGrid.ItemsSource=null; PendingChoice.ItemsSource=null; PendingText.Text=""; UpdateResultDetails(null,null);
+  OrderChoice.ItemsSource=orders; ResultsGrid.ItemsSource=null; PendingGrid.ItemsSource=null; PendingChoice.ItemsSource=null; PendingText.Text=""; OrderChoice.SelectedItem=orders.FirstOrDefault(); UpdateResultDetails(null,null);
  } private void OpenExistingPdf(object sender,RoutedEventArgs e)
  {
   var dialog=new Microsoft.Win32.OpenFileDialog{Filter="PDF|*.pdf",CheckFileExists=true};if(dialog.ShowDialog()!=true)return;

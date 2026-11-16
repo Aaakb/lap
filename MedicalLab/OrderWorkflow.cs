@@ -23,6 +23,7 @@ public class AuditEntry
 public static class OrderWorkflow
 {
  public static List<LabOrder> OrdersForPatient(LabContext db,int? patientId) => patientId is null ? new() : db.LabOrders.AsNoTracking().Where(o=>o.PatientId==patientId.Value).OrderByDescending(o=>o.Id).ToList();
+ public static LabOrder? LatestOrderForPatient(LabContext db,int? patientId) => OrdersForPatient(db,patientId).FirstOrDefault();
  public static void RequireDraft(LabOrder order) { if(order.Approved) throw new InvalidOperationException("الطلب معتمد. أعد فتحه للتعديل أولاً."); }
  public static void ValidateApproval(int results,int pending) { if(results==0 || pending>0) throw new ArgumentException("لا يمكن اعتماد طلب فارغ أو فيه تحاليل لم تُدخل نتائجها."); }
  public static void Log(LabContext db,int order,string action) => db.AuditEntries.Add(new AuditEntry {At=DateTime.Now,OrderId=order,Action=action});
