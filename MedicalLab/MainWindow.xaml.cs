@@ -39,7 +39,8 @@ public partial class MainWindow : Window
  private void TabChanged(object sender, SelectionChangedEventArgs e) { if (ready && e.Source == Tabs) RefreshAll(); }
  private Patient SavePatient()
  {
-  var input=Patient.Create(NameInput.Text,BirthInput.SelectedDate,(SexInput.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "غير محدد");
+  var sex=(SexInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? ""; Patient.ValidateRequired(NameInput.Text,BirthInput.SelectedDate,sex);
+  var input=Patient.Create(NameInput.Text,BirthInput.SelectedDate,sex);
   using var db=new LabContext();
   if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المريض غير موجود."); current.Name=input.Name;current.BirthDate=input.BirthDate;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
   db.SaveChanges(); return input;
@@ -121,7 +122,7 @@ public partial class MainWindow : Window
  private void PatientSelected(object sender, SelectionChangedEventArgs e)
  {
   if(PatientsGrid.SelectedItem is not Patient p) return;
-  patientEditingId=p.Id; NameInput.Text=p.Name; BirthInput.SelectedDate=p.BirthDate; SexInput.SelectedIndex=p.Sex=="ذكر"?1:p.Sex=="أنثى"?2:0;
+  patientEditingId=p.Id; NameInput.Text=p.Name; BirthInput.SelectedDate=p.BirthDate; SexInput.SelectedIndex=Patient.SexInEnglish(p.Sex)=="Male"?1:Patient.SexInEnglish(p.Sex)=="Female"?2:0;
  }
  private void NewPatient(object? sender,RoutedEventArgs? e) { patientEditingId=null; PatientsGrid.SelectedItem=null; NameInput.Clear(); BirthInput.SelectedDate=null; SexInput.SelectedIndex=0; }
  private void SearchPatients(object sender,TextChangedEventArgs e)

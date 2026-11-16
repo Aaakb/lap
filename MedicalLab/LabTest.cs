@@ -40,7 +40,7 @@ public static class RangeSelector
  {
   if (birth is null || birth.Value.Date > date.Date) return null;
   var age = date.Year - birth.Value.Year - (birth.Value.Date > date.Date.AddYears(-(date.Year-birth.Value.Year)) ? 1 : 0);
-  var matches = ranges.Where(r => r.Active && age >= r.MinAge && age <= r.MaxAge && (r.Sex == "الكل" || r.Sex == sex)).ToList();
+  var matches = ranges.Where(r => r.Active && age >= r.MinAge && age <= r.MaxAge && (r.Sex == "الكل" || (Patient.SexInEnglish(r.Sex) != "—" && Patient.SexInEnglish(r.Sex) == Patient.SexInEnglish(sex)))).ToList();
   return matches.Count == 1 ? matches[0] : null;
  }
 }
