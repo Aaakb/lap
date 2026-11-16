@@ -32,7 +32,7 @@ public partial class MainWindow : Window
   PatientChoice.SelectedItem=patients.FirstOrDefault(p=>p.Id==selectedPatientId);
   var orders=db.LabOrders.AsNoTracking().OrderByDescending(o=>o.Id).ToList(); OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=orders.FirstOrDefault(o=>o.Id==selectedOrderId);
   var tests = db.LabTests.AsNoTracking().OrderBy(t=>t.Name).ThenBy(t=>t.MinAge).ToList();
-  TestsGrid.ItemsSource = tests; TestChoice.ItemsSource = tests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList(); TestChoice.SelectedItem=selectedTest;
+  TestsGrid.ItemsSource = tests; TestChoice.ItemsSource = tests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList(); TestChoice.SelectedItem=PendingChoice.SelectedItem as string ?? selectedTest; UpdateResultDetails(null,null);
   if(OrderChoice.SelectedItem is LabOrder activeOrder) { var resultIds=db.OrderResults.Where(x=>x.LabOrderId==activeOrder.Id).Select(x=>x.LabResultId); ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().Where(r=>resultIds.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); } else ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().OrderByDescending(r=>r.Id).ToList();
  }
  private void TabChanged(object sender, SelectionChangedEventArgs e) { if (ready && e.Source == Tabs) RefreshAll(); }
@@ -96,7 +96,7 @@ public partial class MainWindow : Window
   if(PatientChoice.SelectedItem is not Patient patient || TestChoice.SelectedItem is not string name || string.IsNullOrWhiteSpace(ValueInput.Text)) { MessageBox.Show("اختر المريض والتحليل وأدخل النتيجة."); return; }
   try {
    if(OrderChoice.SelectedItem is not LabOrder order || order.PatientId!=patient.Id) { MessageBox.Show("اختر طلباً لهذا المريض أو أنشئ طلباً جديداً."); return; }
-   using var db=new LabContext(); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text); ValueInput.Clear(); RefreshAll();
+   using var db=new LabContext(); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text); ValueInput.Clear(); RefreshAll(); if(PendingChoice.SelectedItem is string next) TestChoice.SelectedItem=next; ValueInput.Focus();
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException or InvalidOperationException ? ex.Message : "تعذر حفظ النتيجة."); }
  }
  private void PrintResult(object sender,RoutedEventArgs e)
@@ -134,7 +134,7 @@ public partial class MainWindow : Window
  {
   if(!ready || OrderChoice.SelectedItem is not LabOrder order) return;
   PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).FirstOrDefault(p=>p.Id==order.PatientId);
-  using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); ResultsGrid.ItemsSource=rows; var completed=rows.Select(r=>r.TestName).ToHashSet(); var pending=db.PlannedTests.Where(t=>t.LabOrderId==order.Id).Select(t=>t.TestName).ToList().Where(n=>!completed.Contains(n)); var pendingNames=pending.ToList(); PendingChoice.ItemsSource=pendingNames; PendingText.Text="بانتظار النتائج: "+(pendingNames.Count==0?"لا يوجد":string.Join("، ",pendingNames));
+  using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); ResultsGrid.ItemsSource=rows; var completed=rows.Select(r=>r.TestName).ToHashSet(); var pending=db.PlannedTests.Where(t=>t.LabOrderId==order.Id).Select(t=>t.TestName).ToList().Where(n=>!completed.Contains(n)); var pendingNames=pending.ToList(); PendingChoice.ItemsSource=pendingNames; PendingText.Text="التحاليل المنتظرة: "+(pendingNames.Count==0?"لا يوجد":string.Join("، ",pendingNames)); if(pendingNames.Count>0) PendingChoice.SelectedIndex=0; UpdateResultDetails(null,null);
  } private void SaveSettings(object sender,RoutedEventArgs e)
  {
   if(string.IsNullOrWhiteSpace(LabNameInput.Text)) { MessageBox.Show("أدخل اسم المختبر."); return; }
@@ -198,4 +198,20 @@ public partial class MainWindow : Window
    pendingLogo=bytes; LogoStatus.Text="تم اختيار شعار — اضغط حفظ بيانات المختبر";
   } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر قراءة الصورة. اختر ملف PNG أو JPEG صالحاً.");}
  }
- private void RemoveLogo(object sender,RoutedEventArgs e) {pendingLogo=null;LogoStatus.Text="ستُزال الصورة عند حفظ بيانات المختبر";}}
+ private void RemoveLogo(object sender,RoutedEventArgs e) {pendingLogo=null;LogoStatus.Text="ستُزال الصورة عند حفظ بيانات المختبر";} private void PendingSelected(object sender,SelectionChangedEventArgs e)
+ {
+  if(!ready || PendingChoice.SelectedItem is not string name) return;
+  TestChoice.SelectedItem=name;
+  UpdateResultDetails(null,null);
+ }
+ private void UpdateResultDetails(object? sender,SelectionChangedEventArgs? e)
+ {
+  if(!ready || ResultDetails is null) return;
+  if(OrderChoice.SelectedItem is not LabOrder order || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر طلباً وتحليلاً لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  using var db=new LabContext(); var patient=db.Patients.AsNoTracking().SingleOrDefault(p=>p.Id==order.PatientId);
+  if(patient is null) {ResultDetails.Text="بيانات المريض غير موجودة.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date);
+  if(range is null) {ResultDetails.Text="لا يوجد نطاق مطابق؛ تحقق من تاريخ الميلاد والجنس ونطاقات التحليل.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  ResultDetails.FlowDirection=FlowDirection.LeftToRight;
+  ResultDetails.Text=range.IsText ? $"{name}  |  Text result  |  Reference: {(string.IsNullOrWhiteSpace(range.ExpectedText)?"—":range.ExpectedText)}" : $"{name}  |  Numeric result  |  Reference: {range.Low} - {range.High}  |  Unit: {range.Unit}";
+ }}
