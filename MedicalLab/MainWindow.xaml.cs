@@ -254,4 +254,14 @@ public partial class MainWindow : Window
   if(!ready || updatingPatients) return;
   using var db=new LabContext(); var orders=OrderWorkflow.OrdersForPatient(db,(PatientChoice.SelectedItem as Patient)?.Id);
   OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=null; ResultsGrid.ItemsSource=null; PendingGrid.ItemsSource=null; PendingChoice.ItemsSource=null; PendingText.Text=""; UpdateResultDetails(null,null);
+ } private void ExportHistory(object sender,RoutedEventArgs e)
+ {
+  if(PatientsGrid.SelectedItem is not Patient patient){MessageBox.Show("اختر المراجع من القائمة أولاً.");return;}
+  try {using var db=new LabContext();var history=MedicalLab.PatientHistory.Load(db,patient.Id);var doc=LabReport.BuildHistory(db.Settings.AsNoTracking().Single(),history);var dialog=new Microsoft.Win32.SaveFileDialog{Filter="PDF|*.pdf",FileName=ReportFileName.Create(patient.Name,patient.Id)};if(dialog.ShowDialog()!=true)return;LabReport.SavePdf(doc,dialog.FileName);MessageBox.Show("تم حفظ سجل المراجع.");}
+  catch(Exception){MessageBox.Show("تعذر تصدير السجل. تحقق من الملف وصلاحيات الحفظ.");}
+ }
+ private void OpenExistingPdf(object sender,RoutedEventArgs e)
+ {
+  var dialog=new Microsoft.Win32.OpenFileDialog{Filter="PDF|*.pdf",CheckFileExists=true};if(dialog.ShowDialog()!=true)return;
+  try {System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName){UseShellExecute=true});}catch(Exception){MessageBox.Show("تعذر فتح التقرير. تحقق من وجود برنامج لعرض PDF.");}
  }}

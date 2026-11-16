@@ -26,6 +26,22 @@ public static class LabReport
   foreach(var r in rows) AddRow(group,new[]{r.TestName,r.ValueDisplay,r.Unit,r.ReferenceDisplay,r.FlagDisplay},false);
   doc.Blocks.Add(table); return doc;
  }
+ public static FlowDocument BuildHistory(LabSettings settings,PatientHistory history)
+ {
+  var doc=new FlowDocument {FlowDirection=FlowDirection.RightToLeft,FontFamily=new FontFamily("Segoe UI"),FontSize=16,PageWidth=793.7,PageHeight=1122.5,PagePadding=new Thickness(42,42,42,55),ColumnWidth=double.PositiveInfinity};
+  doc.Blocks.Add(new Paragraph(new Run(settings.Name)) {FontSize=28,FontWeight=FontWeights.Bold,Foreground=new SolidColorBrush(Color.FromRgb(21,86,90))});
+  doc.Blocks.Add(new Paragraph(new Run("سجل مراجعات المراجع")) {FontSize=22,FontWeight=FontWeights.SemiBold});
+  doc.Blocks.Add(new Paragraph(new Run("القيم المرجعية الحالية غير معتمدة - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});
+  var patient=history.Patient;doc.Blocks.Add(new Paragraph(new Run($"المراجع: {patient.Name} | الجنس: {patient.SexDisplay} | الميلاد: {patient.BirthDate:yyyy-MM-dd}")));
+  if(history.Orders.Count==0)doc.Blocks.Add(new Paragraph(new Run("لا توجد مراجعات مسجلة.")));
+  foreach(var visit in history.Orders) {
+   doc.Blocks.Add(new Paragraph(new Run($"طلب {visit.Order.PatientOrderNumber} — {visit.Order.CreatedAt:yyyy-MM-dd}")) {FontSize=18,FontWeight=FontWeights.Bold,Margin=new Thickness(0,18,0,6)});
+   if(visit.Results.Count==0) doc.Blocks.Add(new Paragraph(new Run("لا توجد نتائج محفوظة.")));
+   else {var table=new Table {CellSpacing=0,FlowDirection=FlowDirection.LeftToRight,TextAlignment=TextAlignment.Left};foreach(var w in new[]{2.5,1.3,1.1,1.8,1.7})table.Columns.Add(new TableColumn{Width=new GridLength(w,GridUnitType.Star)});var group=new TableRowGroup();table.RowGroups.Add(group);AddRow(group,new[]{"Test","Result","Unit","Reference","Flag"},true);foreach(var r in visit.Results)AddRow(group,new[]{r.TestName,r.ValueDisplay,r.Unit,r.ReferenceDisplay,r.FlagDisplay},false);doc.Blocks.Add(table);}
+   if(visit.Pending.Count>0)doc.Blocks.Add(new Paragraph(new Run("Pending: "+string.Join(", ",visit.Pending))) {FlowDirection=FlowDirection.LeftToRight,FontSize=13});
+  }
+  return doc;
+ }
  private static void AddRow(TableRowGroup group,string[] values,bool header)
  {
   var row=new TableRow(); foreach(var value in values) row.Cells.Add(new TableCell(new Paragraph(new Run(value)) {Margin=new Thickness(0)}) {Padding=new Thickness(7,11,7,11),BorderBrush=Brushes.LightGray,BorderThickness=new Thickness(0,0,0,1),Background=header?new SolidColorBrush(Color.FromRgb(230,240,240)):Brushes.White,FontWeight=header?FontWeights.Bold:FontWeights.Normal}); group.Rows.Add(row);
