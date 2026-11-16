@@ -8,7 +8,7 @@ public class PdfExportTests
  {
   Exception? error=null; var thread=new Thread(()=> {
    try {
-    var rows=new[]{new LabResult { PatientId=1,PatientName="مريض تجريبي",PatientSex="ذكر",BirthDate=new DateTime(2000,1,1),TestName="Glucose (DEMO)",Value=22,Low=20,High=30,Unit="demo unit",Status="ضمن النطاق"},new LabResult {PatientId=1,PatientName="مريض تجريبي",IsText=true,TestName="Screening (DEMO)",TextValue="Negative",ExpectedText="Negative",Status="مطابق للمرجع"}};
+    var rows=new[]{new LabResult { PatientId=1,PatientName="مريض تجريبي",PatientSex="ذكر",BirthDate=new DateTime(2000,1,1),TestName="Glucose (DEMO)",Value=22,Low=20,High=30,Unit="demo unit",Status="ضمن النطاق"},new LabResult {PatientId=1,PatientName="مريض تجريبي",PatientSex="ذكر",BirthDate=new DateTime(2000,1,1),IsText=true,TestName="Screening (DEMO)",TextValue="Negative",ExpectedText="Negative",Status="مطابق للمرجع"}};
     var doc=LabReport.Build(new LabSettings {Name="مختبر الأصمعي",Address="بغداد",Phone="0000000000"},new LabOrder {Id=1,CreatedAt=DateTime.Now,Approved=true},rows);
     var table=doc.Blocks.OfType<Table>().Single(); Assert.Equal(FlowDirection.LeftToRight,table.FlowDirection);
     var path=Path.Combine(AppContext.BaseDirectory,"report-preview.pdf"); LabReport.SavePdf(doc,path);

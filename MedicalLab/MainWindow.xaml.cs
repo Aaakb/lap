@@ -36,11 +36,33 @@ public partial class MainWindow : Window
   if(OrderChoice.SelectedItem is LabOrder activeOrder) { var resultIds=db.OrderResults.Where(x=>x.LabOrderId==activeOrder.Id).Select(x=>x.LabResultId); ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().Where(r=>resultIds.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); } else ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().OrderByDescending(r=>r.Id).ToList();
  }
  private void TabChanged(object sender, SelectionChangedEventArgs e) { if (ready && e.Source == Tabs) RefreshAll(); }
- private void AddPatient(object sender, RoutedEventArgs e)
+ private Patient SavePatient()
  {
-  try { var p=Patient.Create(NameInput.Text, BirthInput.SelectedDate, (SexInput.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "غير محدد"); using var db=new LabContext(); if(patientEditingId is int id) { var current=db.Patients.Find(id)!; current.Name=p.Name; current.BirthDate=p.BirthDate; current.Sex=p.Sex; } else db.Patients.Add(p); db.SaveChanges(); NewPatient(null,null); RefreshAll(); }
-  catch (Exception ex) { MessageBox.Show(ex is ArgumentException ? ex.Message : "تعذر حفظ المريض.", "تنبيه"); }
+  var input=Patient.Create(NameInput.Text,BirthInput.SelectedDate,(SexInput.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "غير محدد");
+  using var db=new LabContext();
+  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المريض غير موجود."); current.Name=input.Name;current.BirthDate=input.BirthDate;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
+  db.SaveChanges(); return input;
  }
+ private void AddPatient(object sender,RoutedEventArgs e)
+ {
+  try { SavePatient(); NewPatient(null,null); RefreshAll(); } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ المريض.","تنبيه");}
+ }
+ private void SavePatientAndOrder(object sender,RoutedEventArgs e)
+ {
+  try {var patient=SavePatient(); NewPatient(null,null); CreateOrderFor(patient);}
+  catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر إكمال العملية. تحقق من قائمة المرضى قبل إعادة المحاولة.","تنبيه");}
+ }
+ private void SelectedPatientOrder(object sender,RoutedEventArgs e)
+ {
+  if(PatientsGrid.SelectedItem is not Patient patient) {MessageBox.Show("اختر المريض من القائمة أولاً.");return;}
+  try {CreateOrderFor(patient);} catch(Exception) {MessageBox.Show("تعذر إنشاء الطلب.");}
+ }
+ private void CreateOrderFor(Patient patient)
+ {
+  using var db=new LabContext();var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now}; db.LabOrders.Add(order);db.SaveChanges();
+  Tabs.SelectedItem=ResultsTab; RefreshAll(); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==order.Id); TestChoice.Focus();
+ }
+ private void PlanSelectedTest(object sender,RoutedEventArgs e) => RunAction(()=> {var order=SelectedOrder();if(TestChoice.SelectedItem is not string name) throw new ArgumentException("اختر التحليل أولاً.");using var db=new LabContext();OrderWorkflow.PlanTests(db,order.Id,new[]{name});});
  private static bool Number(string text, out double value) => double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) || double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
  private void ClearTest(object? sender, RoutedEventArgs? e) { editingId=null; TestsGrid.SelectedItem=null; TestName.Clear(); UnitInput.Clear(); MinAge.Clear(); MaxAge.Clear(); LowInput.Clear(); HighInput.Clear(); RangeSex.SelectedIndex=0; ResultKind.SelectedIndex=0; ExpectedTextInput.Clear(); }
  private void TestSelected(object sender, SelectionChangedEventArgs e)
@@ -75,7 +97,7 @@ public partial class MainWindow : Window
   try {
    if(OrderChoice.SelectedItem is not LabOrder order || order.PatientId!=patient.Id) { MessageBox.Show("اختر طلباً لهذا المريض أو أنشئ طلباً جديداً."); return; }
    using var db=new LabContext(); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text); ValueInput.Clear(); RefreshAll();
-  } catch(ArgumentException ex) { MessageBox.Show(ex.Message); } catch(Exception) { MessageBox.Show("تعذر حفظ النتيجة."); }
+  } catch(Exception ex) { MessageBox.Show(ex is ArgumentException or InvalidOperationException ? ex.Message : "تعذر حفظ النتيجة."); }
  }
  private void PrintResult(object sender,RoutedEventArgs e)
  {
