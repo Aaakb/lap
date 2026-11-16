@@ -19,7 +19,7 @@ public static class LabReport
   }
   doc.Blocks.Add(new Paragraph(new Run(settings.Name)) {FontSize=28,FontWeight=FontWeights.Bold,Foreground=new SolidColorBrush(Color.FromRgb(21,86,90))});
   doc.Blocks.Add(new Paragraph(new Run(settings.Address+"   "+settings.Phone)) {FontSize=15,Foreground=Brushes.DimGray,Margin=new Thickness(0,0,0,12)});
-  doc.Blocks.Add(new Paragraph(new Run("تقرير تجريبي - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});
+  doc.Blocks.Add(new Paragraph(new Run("القيم المرجعية الحالية غير معتمدة - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});
   doc.Blocks.Add(new Paragraph(new Run($"طلب {order.PatientOrderNumber} | {order.CreatedAt:yyyy-MM-dd}\nالمراجع: {first.PatientName} | الجنس: {Patient.SexInEnglish(first.PatientSex)} | الميلاد: {first.BirthDate:yyyy-MM-dd}")) { FontSize=16, LineHeight=27, Background=new SolidColorBrush(Color.FromRgb(245,249,249)), Padding=new Thickness(12), Margin=new Thickness(0,12,0,18) });
   var table=new Table {CellSpacing=0,FlowDirection=FlowDirection.LeftToRight,TextAlignment=TextAlignment.Left}; foreach(var width in new[]{2.5,1.3,1.1,1.8,1.7}) table.Columns.Add(new TableColumn {Width=new GridLength(width,GridUnitType.Star)});
   var group=new TableRowGroup(); table.RowGroups.Add(group); AddRow(group,new[]{"Test","Result","Unit","Reference","Flag"},true);
@@ -33,7 +33,7 @@ public static class LabReport
  public static void SavePdf(FlowDocument document,string path)
  {
   var paginator=((IDocumentPaginatorSource)document).DocumentPaginator; paginator.ComputePageCount();
-  using var pdf=new PdfDocument(); pdf.Info.Title="Laboratory demo report";
+  using var pdf=new PdfDocument(); pdf.Info.Title="Laboratory report";
   for(int i=0;i<paginator.PageCount;i++) {
    using var page=paginator.GetPage(i); var visual=new DrawingVisual();
    using(var drawing=visual.RenderOpen()) { drawing.DrawRectangle(Brushes.White,null,new Rect(new Point(),page.Size)); drawing.DrawRectangle(new VisualBrush(page.Visual),null,new Rect(new Point(),page.Size)); var footer=new FormattedText($"Page {i+1} of {paginator.PageCount}",System.Globalization.CultureInfo.InvariantCulture,FlowDirection.LeftToRight,new Typeface("Segoe UI"),10,Brushes.Gray,2); drawing.DrawText(footer,new Point(48,page.Size.Height-28)); }

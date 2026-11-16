@@ -117,7 +117,7 @@ public partial class MainWindow : Window
   using var orderDb=new LabContext(); var printedOrder=orderDb.LabOrders.Find(((LabOrder)OrderChoice.SelectedItem).Id)!;
   var dlg=new PrintDialog(); if(dlg.ShowDialog()!=true) return;
   using var reportDb=new LabContext(); var settings=reportDb.Settings.AsNoTracking().Single(); var doc=LabReport.Build(settings,printedOrder,rows); doc.PageWidth=dlg.PrintableAreaWidth; doc.PageHeight=dlg.PrintableAreaHeight;
-  dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, "تقرير مختبر تجريبي");
+  dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, "تقرير المختبر");
  }
  private void PatientSelected(object sender, SelectionChangedEventArgs e)
  {
