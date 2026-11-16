@@ -156,7 +156,7 @@ public partial class MainWindow : Window
  {
   var dialog=new Microsoft.Win32.OpenFileDialog {Filter="SQLite backup|*.db"}; if(dialog.ShowDialog()!=true) return;
   if(MessageBox.Show("ستُستبدل البيانات الحالية ببيانات النسخة المختارة، مع حفظ نسخة من البيانات الحالية قبل الاستعادة. هل تريد المتابعة؟","استعادة البيانات",MessageBoxButton.YesNo,MessageBoxImage.Warning)!=MessageBoxResult.Yes) return;
-  try { DatabaseBackup.Restore(dialog.FileName,DatabaseBackup.LivePath); using(var db=new LabContext()) db.Initialize(); NewPatient(null,null); ClearTest(null,null); OrderChoice.SelectedItem=null; RefreshAll(); MessageBox.Show("تمت الاستعادة."); } catch(Exception ex) { MessageBox.Show("تعذرت الاستعادة: "+ex.Message); }
+  try { DatabaseBackup.Restore(dialog.FileName,DatabaseBackup.LivePath); NewPatient(null,null); ClearTest(null,null); OrderChoice.SelectedItem=null; RefreshAll(); MessageBox.Show("تمت الاستعادة."); } catch(Exception ex) { MessageBox.Show("تعذرت الاستعادة: "+ex.Message); }
  } private void ResultKindChanged(object sender,SelectionChangedEventArgs e)
  {
   if(LowInput is null || HighInput is null || ExpectedTextInput is null) return;
