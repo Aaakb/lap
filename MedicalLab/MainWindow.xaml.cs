@@ -11,6 +11,7 @@ public partial class MainWindow : Window
  private int? patientEditingId;
  private int? panelEditingId;
  private bool ready;
+ private bool updatingPatients;
  private byte[]? pendingLogo;
  public MainWindow()
  {
@@ -28,12 +29,12 @@ public partial class MainWindow : Window
   var settings=db.Settings.AsNoTracking().Single(); LabNameInput.Text=settings.Name; LabAddressInput.Text=settings.Address; LabPhoneInput.Text=settings.Phone; pendingLogo=settings.Logo; LogoStatus.Text=pendingLogo is null ? "لا يوجد شعار" : "تم اختيار شعار";
   var panels=db.Panels.AsNoTracking().OrderBy(p=>p.Name).ToList(); PanelsGrid.ItemsSource=panels; PanelChoice.ItemsSource=panels; AuditGrid.ItemsSource=db.AuditEntries.AsNoTracking().OrderByDescending(a=>a.Id).Take(500).ToList();
   var patients = db.Patients.AsNoTracking().OrderByDescending(p=>p.Id).ToList();
-  PatientsGrid.ItemsSource = patients; PatientChoice.ItemsSource = patients;
+  updatingPatients=true; PatientsGrid.ItemsSource = patients; PatientChoice.ItemsSource = patients;
   PatientChoice.SelectedItem=patients.FirstOrDefault(p=>p.Id==selectedPatientId);
-  var orders=db.LabOrders.AsNoTracking().OrderByDescending(o=>o.Id).ToList(); OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=orders.FirstOrDefault(o=>o.Id==selectedOrderId);
+  var orders=OrderWorkflow.OrdersForPatient(db,selectedPatientId); OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=orders.FirstOrDefault(o=>o.Id==selectedOrderId); updatingPatients=false;
   var tests = db.LabTests.AsNoTracking().OrderBy(t=>t.Name).ThenBy(t=>t.MinAge).ToList();
   TestsGrid.ItemsSource = tests; TestChoice.ItemsSource = tests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList(); TestChoice.SelectedItem=PendingChoice.SelectedItem as string ?? selectedTest; UpdateResultDetails(null,null);
-  if(OrderChoice.SelectedItem is LabOrder activeOrder) { var resultIds=db.OrderResults.Where(x=>x.LabOrderId==activeOrder.Id).Select(x=>x.LabResultId); ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().Where(r=>resultIds.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); } else ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().OrderByDescending(r=>r.Id).ToList();
+  if(OrderChoice.SelectedItem is LabOrder activeOrder) { var resultIds=db.OrderResults.Where(x=>x.LabOrderId==activeOrder.Id).Select(x=>x.LabResultId); ResultsGrid.ItemsSource=db.LabResults.AsNoTracking().Where(r=>resultIds.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); } else ResultsGrid.ItemsSource=null;
  }
  private void TabChanged(object sender, SelectionChangedEventArgs e) { if (ready && e.Source == Tabs) RefreshAll(); }
  private Patient SavePatient()
@@ -60,7 +61,7 @@ public partial class MainWindow : Window
  private void CreateOrderFor(Patient patient)
  {
   using var db=new LabContext();var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now}; db.LabOrders.Add(order);db.SaveChanges();
-  Tabs.SelectedItem=ResultsTab; RefreshAll(); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==order.Id); TestChoice.Focus();
+  Tabs.SelectedItem=ResultsTab; RefreshAll(); PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).First(p=>p.Id==patient.Id); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==order.Id); TestChoice.Focus();
  }
  private void PlanSelectedTest(object sender,RoutedEventArgs e) => RunAction(()=> {var order=SelectedOrder();if(TestChoice.SelectedItem is not string name) throw new ArgumentException("اختر التحليل أولاً.");using var db=new LabContext();OrderWorkflow.PlanTests(db,order.Id,new[]{name});});
  private static bool Number(string text, out double value) => double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) || double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
@@ -133,7 +134,7 @@ public partial class MainWindow : Window
  private void OrderChanged(object sender,SelectionChangedEventArgs e)
  {
   if(!ready || OrderChoice.SelectedItem is not LabOrder order) return;
-  PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).FirstOrDefault(p=>p.Id==order.PatientId);
+  if((PatientChoice.SelectedItem as Patient)?.Id!=order.PatientId) return;
   using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); ResultsGrid.ItemsSource=rows; var completed=rows.Select(r=>r.TestName).ToHashSet(); var pending=db.PlannedTests.Where(t=>t.LabOrderId==order.Id).Select(t=>t.TestName).ToList().Where(n=>!completed.Contains(n)); var pendingNames=pending.ToList(); var patient=db.Patients.AsNoTracking().Single(p=>p.Id==order.PatientId); var available=db.LabTests.AsNoTracking().Where(t=>t.Active).ToList(); PendingGrid.ItemsSource=pendingNames.Select(name=> { var range=RangeSelector.Find(available.Where(t=>t.Name==name),patient.BirthDate,patient.Sex,order.CreatedAt.Date); return new PendingTestRow {Name=name,Kind=range is null?"Unavailable":range.IsText?"Text":"Number",Unit=range?.Unit ?? "",Reference=range is null?"No matching range":range.IsText?range.ExpectedText:$"{range.Low} - {range.High}"}; }).ToList(); PendingChoice.ItemsSource=pendingNames; PendingText.Text="التحاليل المنتظرة: "+(pendingNames.Count==0?"لا يوجد":string.Join("، ",pendingNames)); if(pendingNames.Count>0) PendingChoice.SelectedIndex=0; UpdateResultDetails(null,null);
  } private void SaveSettings(object sender,RoutedEventArgs e)
  {
@@ -223,7 +224,7 @@ public partial class MainWindow : Window
  {
   if(PatientsGrid.SelectedItem is not Patient patient){MessageBox.Show("اختر المريض أولاً.");return;}
   Tabs.SelectedItem=ResultsTab;RefreshAll();PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).FirstOrDefault(p=>p.Id==patient.Id);
-  using var db=new LabContext();var orders=db.LabOrders.AsNoTracking().Where(o=>o.PatientId==patient.Id).OrderByDescending(o=>o.Id).ToList();OrderChoice.ItemsSource=orders;if(orders.Count>0)OrderChoice.SelectedIndex=0;else MessageBox.Show("لا توجد طلبات سابقة لهذا المريض.");
+  if(OrderChoice.Items.Count>0)OrderChoice.SelectedIndex=0;else MessageBox.Show("لا توجد طلبات سابقة لهذا المريض.");
  } private void PendingRowSelected(object sender,SelectionChangedEventArgs e)
  {
   if(!ready || PendingGrid.SelectedItem is not PendingTestRow row) return;
@@ -232,4 +233,9 @@ public partial class MainWindow : Window
  {
   try {var order=SelectedOrder();if(order.Approved) throw new InvalidOperationException("الطلب معتمد؛ أعد فتحه للتصحيح أولاً.");var rows=(PendingGrid.ItemsSource as IEnumerable<PendingTestRow>)?.ToList() ?? new();if(rows.Count==0)throw new ArgumentException("اختر التحاليل المطلوبة أولاً، أو لا توجد نتائج منتظرة.");var window=new ResultsEntryWindow(order,rows){Owner=this};window.ShowDialog();if(window.Saved)RefreshAll();}
   catch(Exception ex){MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر فتح جدول النتائج.");}
+ } private void PatientChoiceChanged(object sender,SelectionChangedEventArgs e)
+ {
+  if(!ready || updatingPatients) return;
+  using var db=new LabContext(); var orders=OrderWorkflow.OrdersForPatient(db,(PatientChoice.SelectedItem as Patient)?.Id);
+  OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=null; ResultsGrid.ItemsSource=null; PendingGrid.ItemsSource=null; PendingChoice.ItemsSource=null; PendingText.Text=""; UpdateResultDetails(null,null);
  }}
