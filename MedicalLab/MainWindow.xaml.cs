@@ -221,8 +221,17 @@ public partial class MainWindow : Window
   ResultDetails.Text=range.IsText ? $"{name}  |  Text result  |  Reference: {(string.IsNullOrWhiteSpace(range.ExpectedText)?"—":range.ExpectedText)}" : $"{name}  |  Numeric result  |  Reference: {range.Low} - {range.High}  |  Unit: {range.Unit}";
  } private void ChooseTests(object sender,RoutedEventArgs e)
  {
-  try {var order=SelectedOrder(); using var db=new LabContext(); OrderWorkflow.RequireDraft(db.LabOrders.Find(order.Id)!); var tests=db.LabTests.AsNoTracking().Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();var dialog=new SelectTestsWindow(tests){Owner=this};if(dialog.ShowDialog()!=true)return;OrderWorkflow.PlanTests(db,order.Id,dialog.SelectedTests);RefreshAll();}
-  catch(Exception ex){MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر إضافة التحاليل.");}
+  try {
+   if(PatientChoice.SelectedItem is not Patient patient) throw new ArgumentException("اختر المريض أولاً.");
+   using var db=new LabContext();var selectedOrder=OrderChoice.SelectedItem as LabOrder;
+   if(selectedOrder is not null) OrderWorkflow.RequireDraft(db.LabOrders.Find(selectedOrder.Id)!);
+   var tests=db.LabTests.AsNoTracking().Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();
+   var dialog=new SelectTestsWindow(tests){Owner=this};if(dialog.ShowDialog()!=true)return;
+   int orderId;
+   if(selectedOrder is null) orderId=OrderWorkflow.CreateOrderWithTests(db,patient.Id,dialog.SelectedTests);
+   else {orderId=selectedOrder.Id;OrderWorkflow.PlanTests(db,orderId,dialog.SelectedTests);}
+   RefreshAll(); OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==orderId);
+  } catch(Exception ex){MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر إضافة التحاليل.");}
  }
  private void PatientHistory(object sender,RoutedEventArgs e)
  {

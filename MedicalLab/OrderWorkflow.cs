@@ -54,17 +54,22 @@ public static class OrderWorkflow
   if(!db.PlannedTests.Any(t=>t.LabOrderId==orderId && t.TestName==name)) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name});
   Log(db,orderId,"إضافة نتيجة: "+name); db.SaveChanges();
  }
- public static void PlanTests(LabContext db,int orderId,IEnumerable<string> selected)
+ public static int CreateOrderWithTests(LabContext db,int patientId,IEnumerable<string> selected)
  {
   using var transaction=db.Database.BeginTransaction();
-  var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("الطلب غير موجود."); RequireDraft(order);
-  var names=selected.Select(x=>x.Trim()).Where(x=>x.Length>0).Distinct().ToArray();
-  if(names.Length==0) throw new ArgumentException("اختر تحليلاً واحداً على الأقل.");
-  var active=db.LabTests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();
-  if(names.Any(n=>!active.Contains(n))) throw new ArgumentException("أحد التحاليل غير متاح.");
-  var existing=db.PlannedTests.Where(t=>t.LabOrderId==orderId).Select(t=>t.TestName).ToList();
-  foreach(var name in names.Except(existing)) {db.PlannedTests.Add(new PlannedTest{LabOrderId=orderId,TestName=name});Log(db,orderId,"إضافة تحليل للطلب: "+name);}
-  db.SaveChanges();transaction.Commit();
+  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المريض أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();PlanTestsCore(db,order.Id,selected);transaction.Commit();return order.Id;}
+  catch {transaction.Rollback();db.ChangeTracker.Clear();throw;}
+ }
+ public static void PlanTests(LabContext db,int orderId,IEnumerable<string> selected)
+ {
+  using var transaction=db.Database.BeginTransaction();PlanTestsCore(db,orderId,selected);transaction.Commit();
+ }
+ private static void PlanTestsCore(LabContext db,int orderId,IEnumerable<string> selected)
+ {
+  var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("الطلب غير موجود.");RequireDraft(order);
+  var names=selected.Select(x=>x.Trim()).Where(x=>x.Length>0).Distinct().ToArray();if(names.Length==0)throw new ArgumentException("اختر تحليلاً واحداً على الأقل.");
+  var active=db.LabTests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();if(names.Any(n=>!active.Contains(n)))throw new ArgumentException("أحد التحاليل غير متاح.");
+  var existing=db.PlannedTests.Where(t=>t.LabOrderId==orderId).Select(t=>t.TestName).ToList();foreach(var name in names.Except(existing)){db.PlannedTests.Add(new PlannedTest{LabOrderId=orderId,TestName=name});Log(db,orderId,"إضافة تحليل للطلب: "+name);}db.SaveChanges();
  }
  public static void ApplyPanel(LabContext db,int orderId,int panelId)
  {
