@@ -13,10 +13,12 @@ public class RestoreSafetyTests : IDisposable
     public RestoreSafetyTests()
     {
         Directory.CreateDirectory(root);
-        using var db = new LabContext(Live);
-        db.Initialize();
-        db.Patients.Add(Patient.Create("البيانات الأصلية", new DateTime(2000, 1, 1), "ذكر"));
-        db.SaveChanges();
+        using (var db = new LabContext(Live))
+        {
+            db.Initialize();
+            db.Patients.Add(Patient.Create("البيانات الأصلية", new DateTime(2000, 1, 1), "ذكر"));
+            db.SaveChanges();
+        }
         DatabaseBackup.Create(Live, Backup);
     }
 
