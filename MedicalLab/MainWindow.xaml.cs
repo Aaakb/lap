@@ -228,4 +228,8 @@ public partial class MainWindow : Window
  {
   if(!ready || PendingGrid.SelectedItem is not PendingTestRow row) return;
   PendingChoice.SelectedItem=row.Name; TestChoice.SelectedItem=row.Name; UpdateResultDetails(null,null); ValueInput.Focus();
+ } private void OpenResultsEntry(object sender,RoutedEventArgs e)
+ {
+  try {var order=SelectedOrder();if(order.Approved) throw new InvalidOperationException("الطلب معتمد؛ أعد فتحه للتصحيح أولاً.");var rows=(PendingGrid.ItemsSource as IEnumerable<PendingTestRow>)?.ToList() ?? new();if(rows.Count==0)throw new ArgumentException("اختر التحاليل المطلوبة أولاً، أو لا توجد نتائج منتظرة.");var window=new ResultsEntryWindow(order,rows){Owner=this};window.ShowDialog();if(window.Saved)RefreshAll();}
+  catch(Exception ex){MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر فتح جدول النتائج.");}
  }}

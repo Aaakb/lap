@@ -27,7 +27,15 @@ public static class OrderWorkflow
  public static void Log(LabContext db,int order,string action) => db.AuditEntries.Add(new AuditEntry {At=DateTime.Now,OrderId=order,Action=action});
  public static void SaveResult(LabContext db,int orderId,string name,string input)
  {
-  using var transaction=db.Database.BeginTransaction();
+  using var transaction=db.Database.BeginTransaction(); SaveResultCore(db,orderId,name,input); transaction.Commit();
+ }
+ public static void SaveResults(LabContext db,int orderId,IReadOnlyDictionary<string,string> values)
+ {
+  if(values.Count==0) throw new ArgumentException("أدخل نتيجة واحدة على الأقل.");
+  using var transaction=db.Database.BeginTransaction(); try { foreach(var entry in values) SaveResultCore(db,orderId,entry.Key,entry.Value); transaction.Commit(); } catch { transaction.Rollback(); db.ChangeTracker.Clear(); throw; }
+ }
+ private static void SaveResultCore(LabContext db,int orderId,string name,string input)
+ {
   var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("الطلب غير موجود."); RequireDraft(order);
   var patient=db.Patients.AsNoTracking().Single(p=>p.Id==order.PatientId);
   var ranges=db.LabTests.AsNoTracking().Where(t=>t.Name==name && t.Active).ToList();
@@ -37,7 +45,7 @@ public static class OrderWorkflow
   var result=ResultEntry.Create(range,input); result.PatientId=patient.Id; result.PatientName=patient.Name; result.PatientSex=patient.Sex; result.BirthDate=patient.BirthDate; result.CreatedAt=DateTime.Now;
   db.LabResults.Add(result); db.SaveChanges(); db.OrderResults.Add(new OrderResult {LabOrderId=orderId,LabResultId=result.Id});
   if(!db.PlannedTests.Any(t=>t.LabOrderId==orderId && t.TestName==name)) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name});
-  Log(db,orderId,"إضافة نتيجة: "+name); db.SaveChanges(); transaction.Commit();
+  Log(db,orderId,"إضافة نتيجة: "+name); db.SaveChanges();
  }
  public static void PlanTests(LabContext db,int orderId,IEnumerable<string> selected)
  {
