@@ -187,7 +187,7 @@ public partial class MainWindow : Window
   try {
    var order=SelectedOrder(); using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderBy(r=>r.Id).ToList();
    var document=LabReport.Build(db.Settings.AsNoTracking().Single(),order,rows);
-   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=$"LabReport-{order.Id}.pdf"}; if(dialog.ShowDialog()!=true) return;
+   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=ReportFileName.Create(rows[0].PatientName,order.Id)}; if(dialog.ShowDialog()!=true) return;
    LabReport.SavePdf(document,dialog.FileName); MessageBox.Show("تم حفظ تقرير PDF.");
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ التقرير. تحقق من أن الملف غير مفتوح ومن صلاحيات المجلد."); }
  } private void RemovePending(object sender,RoutedEventArgs e)
