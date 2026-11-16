@@ -37,6 +37,20 @@ public class RestoreSafetyTests : IDisposable
     }
 
     [Fact]
+    public void InvalidStoredLogoCannotReplaceLiveData()
+    {
+        using (var db = new LabContext(Backup))
+        {
+            db.Settings.Single().Logo = new byte[] { 1, 2, 3 };
+            db.Patients.Single().Name = "من ملف غير صالح";
+            db.SaveChanges();
+        }
+        Assert.ThrowsAny<Exception>(() => DatabaseBackup.Restore(Backup, Live));
+        using var current = new LabContext(Live);
+        Assert.Equal("البيانات الأصلية", current.Patients.Single().Name);
+    }
+
+    [Fact]
     public void RestoreMigratesAStagedCopyAndPreservesOriginalBackup()
     {
         using (var db = new LabContext(Backup))

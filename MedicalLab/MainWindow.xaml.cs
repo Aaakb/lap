@@ -104,17 +104,15 @@ public partial class MainWindow : Window
  }
  private void PrintResult(object sender,RoutedEventArgs e)
  {
-  List<LabResult> rows;
-  using(var db=new LabContext()) {
-   if(OrderChoice.SelectedItem is not LabOrder order) { MessageBox.Show("اختر الطلب المراد طباعته."); return; }
-   var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderBy(r=>r.Id).ToList();
+  try {
+   using var db=new LabContext();
+   var report=OrderReportData.Load(db,SelectedOrder().Id);
+   var doc=LabReport.Build(report);
+   var dlg=new PrintDialog(); if(dlg.ShowDialog()!=true) return;
+   doc.PageWidth=dlg.PrintableAreaWidth; doc.PageHeight=dlg.PrintableAreaHeight;
+   dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, "تقرير المختبر");
   }
-  try { ReportSelection.Validate(rows); } catch(ArgumentException ex) { MessageBox.Show(ex.Message); return; }
-  var r=rows[0];
-  using var orderDb=new LabContext(); var printedOrder=orderDb.LabOrders.Find(((LabOrder)OrderChoice.SelectedItem).Id)!;
-  var dlg=new PrintDialog(); if(dlg.ShowDialog()!=true) return;
-  using var reportDb=new LabContext(); var settings=reportDb.Settings.AsNoTracking().Single(); var doc=LabReport.Build(settings,printedOrder,rows); doc.PageWidth=dlg.PrintableAreaWidth; doc.PageHeight=dlg.PrintableAreaHeight;
-  dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, "تقرير المختبر");
+  catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذرت الطباعة. تحقق من اتصال الطابعة وصلاحياتها ومن صحة شعار المختبر، ثم أعد المحاولة.","تعذر طباعة التقرير",MessageBoxButton.OK,MessageBoxImage.Warning);}
  }
  private void PatientSelected(object sender, SelectionChangedEventArgs e)
  {
@@ -183,9 +181,9 @@ public partial class MainWindow : Window
  private void RunAction(Action action) { try {action(); RefreshAll();} catch(Exception ex) { MessageBox.Show(ex is ArgumentException or InvalidOperationException?ex.Message:"تعذر تنفيذ العملية.");} } private void ExportPdf(object sender,RoutedEventArgs e)
  {
   try {
-   var order=SelectedOrder(); using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderBy(r=>r.Id).ToList();
-   var document=LabReport.Build(db.Settings.AsNoTracking().Single(),order,rows);
-   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=ReportFileName.Create(rows[0].PatientName,order.PatientOrderNumber)}; if(dialog.ShowDialog()!=true) return;
+   using var db=new LabContext(); var report=OrderReportData.Load(db,SelectedOrder().Id);
+   var document=LabReport.Build(report);
+   var dialog=new Microsoft.Win32.SaveFileDialog {Filter="PDF report|*.pdf",FileName=ReportFileName.Create(report.Results[0].PatientName,report.Order.PatientOrderNumber)}; if(dialog.ShowDialog()!=true) return;
    LabReport.SavePdf(document,dialog.FileName); MessageBox.Show("تم حفظ تقرير PDF.");
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر حفظ التقرير. تحقق من أن الملف غير مفتوح ومن صلاحيات المجلد."); }
  } private void RemovePending(object sender,RoutedEventArgs e)
@@ -196,8 +194,7 @@ public partial class MainWindow : Window
   var dialog=new Microsoft.Win32.OpenFileDialog {Filter="Image files|*.png;*.jpg;*.jpeg",CheckFileExists=true}; if(dialog.ShowDialog()!=true) return;
   try {
    var file=new System.IO.FileInfo(dialog.FileName); if(file.Length>2_000_000) throw new ArgumentException("حجم الصورة يجب ألا يتجاوز 2 MB.");
-   var bytes=System.IO.File.ReadAllBytes(dialog.FileName); using var stream=new System.IO.MemoryStream(bytes); var decoder=System.Windows.Media.Imaging.BitmapDecoder.Create(stream,System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-   if(decoder.Frames[0].PixelWidth>4000 || decoder.Frames[0].PixelHeight>4000) throw new ArgumentException("أبعاد الصورة أكبر من المسموح (4000 × 4000).");
+   var bytes=System.IO.File.ReadAllBytes(dialog.FileName); _=LabLogo.Decode(bytes);
    pendingLogo=bytes; LogoStatus.Text="تم اختيار شعار — اضغط حفظ بيانات المختبر";
   } catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذر قراءة الصورة. اختر ملف PNG أو JPEG صالحاً.");}
  }

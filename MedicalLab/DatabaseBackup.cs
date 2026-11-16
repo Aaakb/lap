@@ -54,7 +54,8 @@ public static class DatabaseBackup
   }
   using var db=new LabContext(path);
   db.Initialize();
-  _=db.Settings.AsNoTracking().Single();
+  var settings=db.Settings.AsNoTracking().Single();
+  _=LabLogo.Decode(settings.Logo);
   ValidateRows(db.Patients); ValidateRows(db.LabTests); ValidateRows(db.LabResults);
   ValidateRows(db.LabOrders); ValidateRows(db.OrderResults); ValidateRows(db.Panels);
   ValidateRows(db.PlannedTests); ValidateRows(db.AuditEntries);

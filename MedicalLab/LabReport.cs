@@ -8,12 +8,13 @@ using PdfSharp.Pdf;
 namespace MedicalLab;
 public static class LabReport
 {
- public static FlowDocument Build(LabSettings settings,LabOrder order,IReadOnlyCollection<LabResult> rows)
+ public static FlowDocument Build(OrderReportData report) => Build(report.Settings,report.Order,report.Results,report.Pending);
+ public static FlowDocument Build(LabSettings settings,LabOrder order,IReadOnlyCollection<LabResult> rows,IReadOnlyCollection<string>? pending=null)
  {
   ReportSelection.Validate(rows); var first=rows.First();
   var doc=new FlowDocument {FlowDirection=FlowDirection.RightToLeft,FontFamily=new FontFamily("Segoe UI"),FontSize=16,PageWidth=793.7,PageHeight=1122.5,PagePadding=new Thickness(42,42,42,55),ColumnWidth=double.PositiveInfinity};
   if(settings.Logo is { Length: > 0 }) {
-   var image=new BitmapImage(); using var source=new MemoryStream(settings.Logo); image.BeginInit(); image.CacheOption=BitmapCacheOption.OnLoad; image.StreamSource=source; image.EndInit(); image.Freeze();
+   var image=LabLogo.Decode(settings.Logo);
    var logo=new System.Windows.Controls.Image {Source=image,Width=95,Height=70,Stretch=Stretch.Uniform,HorizontalAlignment=HorizontalAlignment.Right};
    doc.Blocks.Add(new BlockUIContainer(logo) {TextAlignment=TextAlignment.Right});
   }
@@ -21,6 +22,10 @@ public static class LabReport
   doc.Blocks.Add(new Paragraph(new Run(settings.Address+"   "+settings.Phone)) {FontSize=15,Foreground=Brushes.DimGray,Margin=new Thickness(0,0,0,12)});
   doc.Blocks.Add(new Paragraph(new Run("القيم المرجعية الحالية غير معتمدة - لا يستخدم لاتخاذ قرارات طبية")) {Foreground=Brushes.DarkRed,FontWeight=FontWeights.Bold});
   doc.Blocks.Add(new Paragraph(new Run($"طلب {order.PatientOrderNumber} | {order.CreatedAt:yyyy-MM-dd}\nالمراجع: {first.PatientName} | الجنس: {Patient.SexInEnglish(first.PatientSex)} | الميلاد: {first.BirthDate:yyyy-MM-dd}")) { FontSize=16, LineHeight=27, Background=new SolidColorBrush(Color.FromRgb(245,249,249)), Padding=new Thickness(12), Margin=new Thickness(0,12,0,18) });
+  if(pending is {Count: > 0}) {
+   doc.Blocks.Add(new Paragraph(new Run($"تقرير جزئي — توجد {pending.Count} من التحاليل بانتظار النتيجة")) {FontWeight=FontWeights.Bold,Foreground=Brushes.DarkOrange});
+   doc.Blocks.Add(new Paragraph(new Run("Pending: "+string.Join(", ",pending))) {FlowDirection=FlowDirection.LeftToRight,TextAlignment=TextAlignment.Left,FontSize=15});
+  }
   var table=new Table {CellSpacing=0,FlowDirection=FlowDirection.LeftToRight,TextAlignment=TextAlignment.Left}; foreach(var width in new[]{2.5,1.3,1.1,1.8,1.7}) table.Columns.Add(new TableColumn {Width=new GridLength(width,GridUnitType.Star)});
   var group=new TableRowGroup(); table.RowGroups.Add(group); AddRow(group,new[]{"Test","Result","Unit","Reference","Flag"},true);
   foreach(var r in rows) AddRow(group,new[]{r.TestName,r.ValueDisplay,r.Unit,r.ReferenceDisplay,r.FlagDisplay},false);
