@@ -262,4 +262,8 @@ public partial class MainWindow : Window
  {
   try {using var db=new LabContext();var selector=new SelectPatientsWindow(db.Patients.AsNoTracking().ToList()){Owner=this};if(selector.ShowDialog()!=true)return;var histories=selector.SelectedIds.Select(id=>MedicalLab.PatientHistory.Load(db,id)).ToList();var doc=LabReport.BuildHistories(db.Settings.AsNoTracking().Single(),histories);var dialog=new Microsoft.Win32.SaveFileDialog{Filter="PDF|*.pdf",FileName=$"Patient-Histories-{DateTime.Today:yyyy-MM-dd}.pdf"};if(dialog.ShowDialog()!=true)return;LabReport.SavePdf(doc,dialog.FileName);MessageBox.Show("تم حفظ سجلات المراجعين.");}
   catch(Exception){MessageBox.Show("تعذر تصدير السجلات. تحقق من الملف وصلاحيات الحفظ.");}
+ } private void DeletePatients(object sender,RoutedEventArgs e)
+ {
+  try {using var db=new LabContext();var window=new DeletePatientsWindow(db.Patients.AsNoTracking().ToList()){Owner=this};window.ShowDialog();if(!window.Deleted)return;PatientChoice.SelectedItem=null;OrderChoice.SelectedItem=null;NewPatient(null,null);PatientSearch.Clear();RefreshAll();}
+  catch(Exception){MessageBox.Show("تعذر فتح قائمة المراجعين.");}
  }}
