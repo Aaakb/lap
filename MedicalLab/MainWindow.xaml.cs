@@ -108,9 +108,12 @@ public partial class MainWindow : Window
    using var db=new LabContext();
    var report=OrderReportData.Load(db,SelectedOrder().Id);
    var doc=LabReport.Build(report);
-   var dlg=new PrintDialog(); if(dlg.ShowDialog()!=true) return;
+   var dlg=new PrintDialog();
+   dlg.PrintTicket.PageMediaSize=new System.Printing.PageMediaSize(System.Printing.PageMediaSizeName.ISOA4);
+   dlg.PrintTicket.PageOrientation=System.Printing.PageOrientation.Portrait;
+   if(dlg.ShowDialog()!=true) return;
    doc.PageWidth=dlg.PrintableAreaWidth; doc.PageHeight=dlg.PrintableAreaHeight;
-   dlg.PrintDocument(((IDocumentPaginatorSource)doc).DocumentPaginator, "تقرير المختبر");
+   dlg.PrintDocument(LabReport.GetPaginator(doc), "تقرير المختبر");
   }
   catch(Exception ex) {MessageBox.Show(ex is ArgumentException?ex.Message:"تعذرت الطباعة. تحقق من اتصال الطابعة وصلاحياتها ومن صحة شعار المختبر، ثم أعد المحاولة.","تعذر طباعة التقرير",MessageBoxButton.OK,MessageBoxImage.Warning);}
  }

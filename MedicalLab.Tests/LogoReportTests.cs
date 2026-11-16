@@ -11,7 +11,7 @@ public class LogoReportTests
    var bitmap=BitmapSource.Create(2,2,96,96,PixelFormats.Bgra32,null,new byte[]{0,0,0,255,0,0,0,255,0,0,0,255,0,0,0,255},8);
    var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using var bytes=new MemoryStream();encoder.Save(bytes);
    var doc=LabReport.Build(new LabSettings{Logo=bytes.ToArray()},new LabOrder(),new[]{new LabResult{PatientId=1,TestName="Demo"}});
-   Assert.Single(doc.Blocks.OfType<BlockUIContainer>());var output=Path.Combine(Path.GetTempPath(),$"logo-{Guid.NewGuid()}.pdf");try{LabReport.SavePdf(doc,output);Assert.True(new FileInfo(output).Length>1000);}finally{File.Delete(output);}
+   var image=Assert.Single(doc.Blocks.OfType<BlockUIContainer>().SelectMany(b=>ReportDesignTests.Descendants(b.Child)).OfType<System.Windows.Controls.Image>());var source=Assert.IsAssignableFrom<BitmapSource>(image.Source);Assert.Equal(2,source.PixelWidth);Assert.Equal(2,source.PixelHeight);var output=Path.Combine(Path.GetTempPath(),$"logo-{Guid.NewGuid()}.pdf");try{LabReport.SavePdf(doc,output);Assert.True(new FileInfo(output).Length>1000);}finally{File.Delete(output);}
   }catch(Exception ex){failure=ex;}});thread.SetApartmentState(ApartmentState.STA);thread.Start();Assert.True(thread.Join(TimeSpan.FromSeconds(30)));if(failure!=null)throw failure;
  }
 }

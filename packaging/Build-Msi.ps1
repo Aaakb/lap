@@ -1,10 +1,14 @@
-param([string]$Source = (Join-Path $PSScriptRoot '..\publish'),[string]$Output = (Join-Path $PSScriptRoot '..\installer-output\AlAsmaiLab-Setup-0.1.1.msi'))
+param([string]$Source = (Join-Path $PSScriptRoot '..\publish'),[string]$Output = '')
 $ErrorActionPreference='Stop'
-$Source=[IO.Path]::GetFullPath($Source); $Output=[IO.Path]::GetFullPath($Output)
+$Source=[IO.Path]::GetFullPath($Source)
 if(!(Test-Path -LiteralPath (Join-Path $Source 'MedicalLab.exe'))) { throw 'Publish the application first.' }
 & (Join-Path $PSScriptRoot 'Verify-Publish.ps1') -Source $Source
 $project=[xml](Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\MedicalLab\MedicalLab.csproj'))
 $productVersion=[string]$project.Project.PropertyGroup.Version
+if([string]::IsNullOrWhiteSpace($Output)) { $Output=Join-Path $PSScriptRoot "..\installer-output\AlAsmaiLab-Setup-$productVersion.msi" }
+$Output=[IO.Path]::GetFullPath($Output)
+$productHash=[Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('AlAsmaiLab/Product/'+$productVersion))
+$productCode=[Guid]::new([byte[]]$productHash[0..15]).ToString('B').ToUpperInvariant()
 New-Item -ItemType Directory -Force -Path (Split-Path $Output) | Out-Null
 if(Test-Path -LiteralPath $Output) { throw 'Output exists; choose a new output path.' }
 $work=Join-Path $env:TEMP ('AlAsmaiLab-build-'+[Guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $work | Out-Null
@@ -19,6 +23,7 @@ function Row([string]$table,[string[]]$columns,[object[]]$values) {
  $view.Execute($record); $view.Close()
 }
 Sql 'CREATE TABLE `Property` (`Property` CHAR(72) NOT NULL, `Value` CHAR(0) LOCALIZABLE PRIMARY KEY `Property`)'
+Sql 'CREATE TABLE `Icon` (`Name` CHAR(72) NOT NULL, `Data` OBJECT NOT NULL PRIMARY KEY `Name`)'
 Sql 'CREATE TABLE `Upgrade` (`UpgradeCode` CHAR(38) NOT NULL, `VersionMin` CHAR(20), `VersionMax` CHAR(20), `Language` CHAR(255), `Attributes` LONG NOT NULL, `Remove` CHAR(255), `ActionProperty` CHAR(72) NOT NULL PRIMARY KEY `UpgradeCode`, `VersionMin`, `VersionMax`, `Language`, `Attributes`)'
 Sql 'CREATE TABLE `Directory` (`Directory` CHAR(72) NOT NULL, `Directory_Parent` CHAR(72), `DefaultDir` CHAR(255) NOT NULL LOCALIZABLE PRIMARY KEY `Directory`)'
 Sql 'CREATE TABLE `Component` (`Component` CHAR(72) NOT NULL, `ComponentId` CHAR(38), `Directory_` CHAR(72) NOT NULL, `Attributes` SHORT NOT NULL, `Condition` CHAR(255), `KeyPath` CHAR(72) PRIMARY KEY `Component`)'
@@ -28,8 +33,9 @@ Sql 'CREATE TABLE `File` (`File` CHAR(72) NOT NULL, `Component_` CHAR(72) NOT NU
 Sql 'CREATE TABLE `Media` (`DiskId` SHORT NOT NULL, `LastSequence` LONG NOT NULL, `DiskPrompt` CHAR(64) LOCALIZABLE, `Cabinet` CHAR(255), `VolumeLabel` CHAR(32), `Source` CHAR(72) PRIMARY KEY `DiskId`)'
 Sql 'CREATE TABLE `Shortcut` (`Shortcut` CHAR(72) NOT NULL, `Directory_` CHAR(72) NOT NULL, `Name` CHAR(128) NOT NULL LOCALIZABLE, `Component_` CHAR(72) NOT NULL, `Target` CHAR(255) NOT NULL, `Arguments` CHAR(255), `Description` CHAR(255) LOCALIZABLE, `Hotkey` SHORT, `Icon_` CHAR(72), `IconIndex` SHORT, `ShowCmd` SHORT, `WkDir` CHAR(72) PRIMARY KEY `Shortcut`)'
 foreach($table in @('InstallExecuteSequence','InstallUISequence','AdminExecuteSequence')) { Sql ('CREATE TABLE `'+$table+'` (`Action` CHAR(72) NOT NULL, `Condition` CHAR(255), `Sequence` SHORT PRIMARY KEY `Action`)') }
-$properties=@{ProductCode='{C1C78592-6880-41A8-8F10-451301D252B0}';UpgradeCode='{A99F48CF-385D-4C76-91F5-56B931DA8E9E}';ProductName='Al Asmai Lab';ProductVersion=$productVersion;ProductLanguage='1033';Manufacturer='Al Asmai Lab';INSTALLLEVEL='1';ARPCOMMENTS='Single-user application. Database is created on first run and retained after uninstall.';ARPNOMODIFY='1';SecureCustomProperties='PREVIOUSPRODUCTS'}
+$properties=@{ProductCode=$productCode;UpgradeCode='{A99F48CF-385D-4C76-91F5-56B931DA8E9E}';ProductName='Al Asmai Lab';ProductVersion=$productVersion;ProductLanguage='1033';Manufacturer='Al Asmai Lab';INSTALLLEVEL='1';ARPCOMMENTS='Single-user application. Database is created on first run and retained after uninstall.';ARPNOMODIFY='1';ARPPRODUCTICON='MedicalLab.exe';SecureCustomProperties='PREVIOUSPRODUCTS'}
 foreach($key in $properties.Keys) { Row Property @('Property','Value') @($key,$properties[$key]) }
+$view=$db.OpenView('INSERT INTO `Icon` (`Name`,`Data`) VALUES (?,?)'); $record=$installer.CreateRecord(2); Set-ComProperty $record 'StringData' @(1,'MedicalLab.exe'); $record.SetStream(2,(Join-Path $PSScriptRoot '..\MedicalLab\Assets\app.ico')); $view.Execute($record); $view.Close()
 Row Upgrade @('UpgradeCode','VersionMax','Attributes','Remove','ActionProperty') @($properties.UpgradeCode,$productVersion,1,'ALL','PREVIOUSPRODUCTS')
 Row Directory @('Directory','Directory_Parent','DefaultDir') @('TARGETDIR',$null,'SourceDir')
 Row Directory @('Directory','Directory_Parent','DefaultDir') @('LocalAppDataFolder','TARGETDIR','.')
@@ -59,7 +65,7 @@ $ddfPath=Join-Path $work 'files.ddf'; [IO.File]::WriteAllLines($ddfPath,$ddf,[Te
 Push-Location $Source; try { & makecab.exe /F $ddfPath | Out-Null; if($LASTEXITCODE -ne 0) { throw 'makecab failed' } } finally { Pop-Location }
 Row Media @('DiskId','LastSequence','Cabinet') @(1,$sequence,'#lab.cab')
 $view=$db.OpenView('INSERT INTO `_Streams` (`Name`,`Data`) VALUES (?,?)'); $record=$installer.CreateRecord(2); Set-ComProperty $record 'StringData' @(1,'lab.cab'); $record.SetStream(2,(Join-Path $work 'lab.cab')); $view.Execute($record); $view.Close()
-foreach($shortcut in @(@('StartShortcut','ProgramMenuFolder'),@('DesktopShortcut','DesktopFolder'))) { Row Shortcut @('Shortcut','Directory_','Name','Component_','Target','Description','ShowCmd','WkDir') @($shortcut[0],$shortcut[1],'Al Asmai Lab',$exeComponent,('[#'+$exeId+']'),'Open laboratory application',1,'INSTALLDIR') }
+foreach($shortcut in @(@('StartShortcut','ProgramMenuFolder'),@('DesktopShortcut','DesktopFolder'))) { Row Shortcut @('Shortcut','Directory_','Name','Component_','Target','Description','Icon_','IconIndex','ShowCmd','WkDir') @($shortcut[0],$shortcut[1],'Al Asmai Lab',$exeComponent,('[#'+$exeId+']'),'Open laboratory application','MedicalLab.exe',0,1,'INSTALLDIR') }
 $actions=@{FindRelatedProducts=25;ValidateProductID=700;CostInitialize=800;FileCost=900;CostFinalize=1000;MigrateFeatureStates=1200;InstallValidate=1400;InstallInitialize=1500;RemoveExistingProducts=1510;ProcessComponents=1600;UnpublishFeatures=1800;RemoveShortcuts=3200;RemoveFiles=3500;InstallFiles=4000;CreateShortcuts=4500;RegisterUser=6000;RegisterProduct=6100;PublishFeatures=6300;PublishProduct=6400;InstallFinalize=6600}
 foreach($action in $actions.Keys) { Row InstallExecuteSequence @('Action','Sequence') @($action,[int]$actions[$action]) }
 foreach($action in @('CostInitialize','FileCost','CostFinalize')) { Row InstallUISequence @('Action','Sequence') @($action,[int]$actions[$action]) }
