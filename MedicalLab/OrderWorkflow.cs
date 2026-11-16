@@ -26,6 +26,12 @@ public static class OrderWorkflow
  public static void RequireDraft(LabOrder order) { if(order.Approved) throw new InvalidOperationException("الطلب معتمد. أعد فتحه للتعديل أولاً."); }
  public static void ValidateApproval(int results,int pending) { if(results==0 || pending>0) throw new ArgumentException("لا يمكن اعتماد طلب فارغ أو فيه تحاليل لم تُدخل نتائجها."); }
  public static void Log(LabContext db,int order,string action) => db.AuditEntries.Add(new AuditEntry {At=DateTime.Now,OrderId=order,Action=action});
+ public static int CreateOrderWithResult(LabContext db,int patientId,string name,string input)
+ {
+  using var transaction=db.Database.BeginTransaction();
+  try {var patient=db.Patients.Find(patientId) ?? throw new ArgumentException("اختر المريض أولاً.");var order=new LabOrder{PatientId=patient.Id,PatientName=patient.Name,CreatedAt=DateTime.Now};db.LabOrders.Add(order);db.SaveChanges();SaveResultCore(db,order.Id,name,input);transaction.Commit();return order.Id;}
+  catch {transaction.Rollback();db.ChangeTracker.Clear();throw;}
+ }
  public static void SaveResult(LabContext db,int orderId,string name,string input)
  {
   using var transaction=db.Database.BeginTransaction(); SaveResultCore(db,orderId,name,input); transaction.Commit();

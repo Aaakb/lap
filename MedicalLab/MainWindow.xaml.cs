@@ -96,8 +96,12 @@ public partial class MainWindow : Window
  {
   if(PatientChoice.SelectedItem is not Patient patient || TestChoice.SelectedItem is not string name || string.IsNullOrWhiteSpace(ValueInput.Text)) { MessageBox.Show("اختر المريض والتحليل وأدخل النتيجة."); return; }
   try {
-   if(OrderChoice.SelectedItem is not LabOrder order || order.PatientId!=patient.Id) { MessageBox.Show("اختر طلباً لهذا المريض أو أنشئ طلباً جديداً."); return; }
-   using var db=new LabContext(); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text); ValueInput.Clear(); RefreshAll(); if(PendingChoice.SelectedItem is string next) TestChoice.SelectedItem=next; ValueInput.Focus();
+   using var db=new LabContext();
+   var order=OrderChoice.SelectedItem as LabOrder;
+   int orderId;
+   if(order is null) orderId=OrderWorkflow.CreateOrderWithResult(db,patient.Id,name,ValueInput.Text);
+   else {if(order.PatientId!=patient.Id) throw new ArgumentException("اختر طلباً يخص المريض."); OrderWorkflow.SaveResult(db,order.Id,name,ValueInput.Text);orderId=order.Id;}
+   ValueInput.Clear();RefreshAll();OrderChoice.SelectedItem=((IEnumerable<LabOrder>)OrderChoice.ItemsSource).First(o=>o.Id==orderId);TestChoice.SelectedItem=null; TestChoice.Focus();
   } catch(Exception ex) { MessageBox.Show(ex is ArgumentException or InvalidOperationException ? ex.Message : "تعذر حفظ النتيجة."); }
  }
  private void PrintResult(object sender,RoutedEventArgs e)
@@ -208,10 +212,10 @@ public partial class MainWindow : Window
  private void UpdateResultDetails(object? sender,SelectionChangedEventArgs? e)
  {
   if(!ready || ResultDetails is null) return;
-  if(OrderChoice.SelectedItem is not LabOrder order || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر طلباً وتحليلاً لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
-  using var db=new LabContext(); var patient=db.Patients.AsNoTracking().SingleOrDefault(p=>p.Id==order.PatientId);
+  if(PatientChoice.SelectedItem is not Patient selectedPatient || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر المريض والتحليل لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  using var db=new LabContext(); var patient=db.Patients.AsNoTracking().SingleOrDefault(p=>p.Id==selectedPatient.Id);
   if(patient is null) {ResultDetails.Text="بيانات المريض غير موجودة.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
-  var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date);
+  var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,(OrderChoice.SelectedItem as LabOrder)?.CreatedAt.Date ?? DateTime.Today);
   if(range is null) {ResultDetails.Text="لا يوجد نطاق مطابق؛ تحقق من تاريخ الميلاد والجنس ونطاقات التحليل.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   ResultDetails.FlowDirection=FlowDirection.LeftToRight;
   ResultDetails.Text=range.IsText ? $"{name}  |  Text result  |  Reference: {(string.IsNullOrWhiteSpace(range.ExpectedText)?"—":range.ExpectedText)}" : $"{name}  |  Numeric result  |  Reference: {range.Low} - {range.High}  |  Unit: {range.Unit}";
