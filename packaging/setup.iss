@@ -1,7 +1,7 @@
 [Setup]
 AppId={{A99F48CF-385D-4C76-91F5-56B931DA8E9E}
 AppName=Al Asmai Lab
-AppVersion=0.1.0
+AppVersion=0.1.1
 DefaultDirName={localappdata}\Programs\AlAsmaiLab
 DefaultGroupName=Al Asmai Lab
 PrivilegesRequired=lowest
