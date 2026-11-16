@@ -10,6 +10,7 @@ public class PanelDefinition
 public class PlannedTest
 {
  public int Id {get;set;}
+ public string TestKey {get;set;}="";
  public int LabOrderId {get;set;}
  public string TestName {get;set;}="";
 }
@@ -24,6 +25,11 @@ public static class OrderWorkflow
 {
  public static List<LabOrder> OrdersForPatient(LabContext db,int? patientId) => patientId is null ? new() : db.LabOrders.AsNoTracking().Where(o=>o.PatientId==patientId.Value).OrderByDescending(o=>o.Id).ToList();
  public static LabOrder? LatestOrderForPatient(LabContext db,int? patientId) => OrdersForPatient(db,patientId).FirstOrDefault();
+ public static List<PlannedTest> PendingTests(LabContext db,int orderId,IEnumerable<LabResult> results)
+ {
+  var completed=results.Select(r=>TestIdentity.Key(r.TestKey,r.TestName)).ToHashSet();
+  return db.PlannedTests.AsNoTracking().Where(t=>t.LabOrderId==orderId).ToList().Where(t=>!completed.Contains(TestIdentity.Key(t.TestKey,t.TestName))).ToList();
+ }
  public static void RequireDraft(LabOrder order) { if(order.Approved) throw new InvalidOperationException("الطلب معتمد. أعد فتحه للتعديل أولاً."); }
  public static void ValidateApproval(int results,int pending) { if(results==0 || pending>0) throw new ArgumentException("لا يمكن اعتماد طلب فارغ أو فيه تحاليل لم تُدخل نتائجها."); }
  public static void Log(LabContext db,int order,string action) => db.AuditEntries.Add(new AuditEntry {At=DateTime.Now,OrderId=order,Action=action});
@@ -49,10 +55,11 @@ public static class OrderWorkflow
   var ranges=db.LabTests.AsNoTracking().Where(t=>t.Name==name && t.Active).ToList();
   var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,order.CreatedAt.Date) ?? throw new ArgumentException("لا يوجد نطاق واحد مطابق لعمر المراجع في تاريخ الطلب وجنسه.");
   var ids=db.OrderResults.Where(x=>x.LabOrderId==orderId).Select(x=>x.LabResultId);
-  if(db.LabResults.Any(r=>ids.Contains(r.Id) && r.TestName==name)) throw new ArgumentException("يوجد لهذا التحليل نتيجة بالفعل. احذف النتيجة السابقة من المسودة قبل تصحيحها.");
+  var key=TestIdentity.Key(range.TestKey,name);
+  if(db.LabResults.Any(r=>ids.Contains(r.Id) && (r.TestName==name || r.TestKey==key))) throw new ArgumentException("يوجد لهذا التحليل نتيجة بالفعل. احذف النتيجة السابقة من المسودة قبل تصحيحها.");
   var result=ResultEntry.Create(range,input); result.PatientId=patient.Id; result.PatientName=patient.Name; result.PatientSex=patient.Sex; result.BirthDate=patient.BirthDate; result.CreatedAt=DateTime.Now;
   db.LabResults.Add(result); db.SaveChanges(); db.OrderResults.Add(new OrderResult {LabOrderId=orderId,LabResultId=result.Id});
-  if(!db.PlannedTests.Any(t=>t.LabOrderId==orderId && t.TestName==name)) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name});
+  if(!db.PlannedTests.Any(t=>t.LabOrderId==orderId && (t.TestName==name || t.TestKey==key))) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name,TestKey=key});
   Log(db,orderId,"إضافة نتيجة: "+name); db.SaveChanges();
  }
  public static int CreateOrderWithTests(LabContext db,int patientId,IEnumerable<string> selected)
@@ -69,18 +76,16 @@ public static class OrderWorkflow
  {
   var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("الطلب غير موجود.");RequireDraft(order);
   var names=selected.Select(x=>x.Trim()).Where(x=>x.Length>0).Distinct().ToArray();if(names.Length==0)throw new ArgumentException("اختر تحليلاً واحداً على الأقل.");
-  var active=db.LabTests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();if(names.Any(n=>!active.Contains(n)))throw new ArgumentException("أحد التحاليل غير متاح.");
-  var existing=db.PlannedTests.Where(t=>t.LabOrderId==orderId).Select(t=>t.TestName).ToList();foreach(var name in names.Except(existing)){db.PlannedTests.Add(new PlannedTest{LabOrderId=orderId,TestName=name});Log(db,orderId,"إضافة تحليل للطلب: "+name);}db.SaveChanges();
+  var active=db.LabTests.AsNoTracking().Where(t=>t.Active).ToList();if(names.Any(n=>!active.Any(t=>t.Name==n)))throw new ArgumentException("أحد التحاليل غير متاح.");
+  var existing=db.PlannedTests.Where(t=>t.LabOrderId==orderId).ToList().Select(t=>TestIdentity.Key(t.TestKey,t.TestName)).ToHashSet();
+  foreach(var name in names){var test=active.First(t=>t.Name==name);var key=TestIdentity.Key(test.TestKey,name);if(existing.Add(key)){db.PlannedTests.Add(new PlannedTest{LabOrderId=orderId,TestName=name,TestKey=key});Log(db,orderId,"إضافة تحليل للطلب: "+name);}}db.SaveChanges();
  }
  public static void ApplyPanel(LabContext db,int orderId,int panelId)
  {
   using var transaction=db.Database.BeginTransaction(); var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("اختر الطلب."); RequireDraft(order);
   var panel=db.Panels.Find(panelId) ?? throw new ArgumentException("اختر المجموعة.");
   var names=PanelDefinition.Parse(panel.TestNames); if(names.Length==0) throw new ArgumentException("المجموعة فارغة.");
-  var available=db.LabTests.Where(t=>t.Active).Select(t=>t.Name).Distinct().ToList();
-  if(names.Any(n=>!available.Contains(n))) throw new ArgumentException("تتضمن المجموعة تحليلاً محذوفاً أو معطلاً؛ عدّل المجموعة أولاً.");
-  var existing=db.PlannedTests.Where(t=>t.LabOrderId==orderId).Select(t=>t.TestName).ToList();
-  foreach(var name in names.Except(existing)) db.PlannedTests.Add(new PlannedTest {LabOrderId=orderId,TestName=name});
+  PlanTestsCore(db,orderId,names);
   Log(db,orderId,"إضافة المجموعة: "+panel.Name); db.SaveChanges(); transaction.Commit();
  }
  public static void SetApproval(LabContext db,int orderId,bool approved)
@@ -88,7 +93,7 @@ public static class OrderWorkflow
   using var transaction=db.Database.BeginTransaction();var order=db.LabOrders.Find(orderId) ?? throw new ArgumentException("اختر الطلب.");
   if(approved) {
    var ids=db.OrderResults.Where(x=>x.LabOrderId==orderId).Select(x=>x.LabResultId); var results=db.LabResults.Where(r=>ids.Contains(r.Id)).ToList(); ReportSelection.Validate(results);
-   var names=results.Select(r=>r.TestName).ToList(); var pending=db.PlannedTests.Where(t=>t.LabOrderId==orderId).Select(t=>t.TestName).ToList().Count(n=>!names.Contains(n)); ValidateApproval(results.Count,pending);
+   ValidateApproval(results.Count,PendingTests(db,orderId,results).Count);
   }
   order.Approved=approved; Log(db,orderId,approved?"اعتماد الطلب":"إعادة فتح الطلب للتصحيح"); db.SaveChanges(); transaction.Commit();
  }

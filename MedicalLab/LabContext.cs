@@ -52,6 +52,9 @@ public class LabContext : DbContext
   AddColumnIfMissing("LabResults","IsText","INTEGER NOT NULL DEFAULT 0");
   AddColumnIfMissing("LabResults","TextValue","TEXT NOT NULL DEFAULT ''");
   AddColumnIfMissing("LabResults","ExpectedText","TEXT NOT NULL DEFAULT ''");
+  AddColumnIfMissing("LabTests","TestKey","TEXT NOT NULL DEFAULT ''");
+  AddColumnIfMissing("LabResults","TestKey","TEXT NOT NULL DEFAULT ''");
+  AddColumnIfMissing("PlannedTests","TestKey","TEXT NOT NULL DEFAULT ''");
   TranslateDemoNames();
   if (Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM AppMetadata WHERE Key = 'DemoSeedV1'").Single() == 0)
   {
@@ -59,6 +62,10 @@ public class LabContext : DbContext
    LabTests.AddRange(new LabTest { Name="Glucose (DEMO)", Unit="demo unit", MinAge=0, MaxAge=17, Sex="الكل", Low=10, High=20 }, new LabTest { Name="Glucose (DEMO)", Unit="demo unit", MinAge=18, MaxAge=120, Sex="الكل", Low=20, High=30 }, new LabTest { Name="Hemoglobin (DEMO)", Unit="demo unit", MinAge=0, MaxAge=120, Sex="الكل", Low=5, High=15 });
    SaveChanges(); Database.ExecuteSqlRaw("INSERT INTO AppMetadata (Key, Value) VALUES ('DemoSeedV1','1')"); transaction.Commit();
   }
+   // Backfill once per record; a subsequent rename must never change its identity.
+   Database.ExecuteSqlRaw("UPDATE LabTests SET TestKey='name:' || Name WHERE TestKey=''");
+   Database.ExecuteSqlRaw("UPDATE LabResults SET TestKey='name:' || TestName WHERE TestKey=''");
+   Database.ExecuteSqlRaw("UPDATE PlannedTests SET TestKey='name:' || TestName WHERE TestKey=''");
  }
  private void AddColumnIfMissing(string table,string column,string definition)
  {

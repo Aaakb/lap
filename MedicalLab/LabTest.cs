@@ -2,6 +2,7 @@ namespace MedicalLab;
 public class LabTest
 {
  public int Id {get;set;}
+ public string TestKey {get;set;} = "";
  public string Name {get;set;} = "";
  public string Unit {get;set;} = "";
  public int MinAge {get;set;}
@@ -16,6 +17,7 @@ public class LabTest
 public class LabResult
 {
  public int Id {get;set;}
+ public string TestKey {get;set;} = "";
  public int PatientId {get;set;}
  public string PatientName {get;set;} = "";
  public string PatientSex {get;set;} = "";
