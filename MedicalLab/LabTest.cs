@@ -22,6 +22,7 @@ public class LabResult
  public string PatientName {get;set;} = "";
  public string PatientSex {get;set;} = "";
  public DateTime? BirthDate {get;set;}
+ public int? AgeYears {get;set;}
  public DateTime CreatedAt {get;set;}
  public string TestName {get;set;} = "";
  public string Unit {get;set;} = "";
@@ -40,8 +41,11 @@ public static class RangeSelector
 {
  public static LabTest? Find(IEnumerable<LabTest> ranges, DateTime? birth, string sex, DateTime date)
  {
-  if (birth is null || birth.Value.Date > date.Date) return null;
-  var age = date.Year - birth.Value.Year - (birth.Value.Date > date.Date.AddYears(-(date.Year-birth.Value.Year)) ? 1 : 0);
+  return FindForAge(ranges,PatientAge.FromBirthDate(birth,date),sex);
+ }
+ public static LabTest? FindForAge(IEnumerable<LabTest> ranges,int? age,string sex)
+ {
+  if(age is null || age<0 || age>150) return null;
   var matches = ranges.Where(r => r.Active && age >= r.MinAge && age <= r.MaxAge && (r.Sex == "الكل" || (Patient.SexInEnglish(r.Sex) != "—" && Patient.SexInEnglish(r.Sex) == Patient.SexInEnglish(sex)))).ToList();
   return matches.Count == 1 ? matches[0] : null;
  }

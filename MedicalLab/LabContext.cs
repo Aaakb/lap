@@ -22,6 +22,10 @@ public class LabContext : DbContext
  }
  public override int SaveChanges()
  {
+  foreach(var entry in ChangeTracker.Entries<LabOrder>().Where(e=>e.State==EntityState.Added && e.Entity.PatientAgeYears==null).ToList()) {
+   var patient=Patients.Local.FirstOrDefault(p=>p.Id==entry.Entity.PatientId) ?? Patients.AsNoTracking().SingleOrDefault(p=>p.Id==entry.Entity.PatientId);
+   if(patient is not null) entry.Entity.PatientAgeYears=PatientAge.At(patient,entry.Entity.CreatedAt.Date);
+  }
   var additions=ChangeTracker.Entries<LabOrder>().Where(e=>e.State==EntityState.Added && e.Entity.PatientOrderNumber==0).Select(e=>e.Entity).ToList();
   foreach(var group in additions.GroupBy(o=>o.PatientId)) {
    var last=LabOrders.Where(o=>o.PatientId==group.Key).Select(o=>(int?)o.PatientOrderNumber).Max() ?? 0;
@@ -32,6 +36,8 @@ public class LabContext : DbContext
  public void Initialize()
  {
   Database.EnsureCreated();
+  Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Patients (Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL, BirthDate TEXT NULL, Sex TEXT NOT NULL)");
+  AddColumnIfMissing("Patients","AgeYears","INTEGER NULL");
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Address TEXT NOT NULL, Phone TEXT NOT NULL)");
   AddColumnIfMissing("Settings","Logo","BLOB NULL");
   if(!Settings.Any()) { Settings.Add(new LabSettings()); SaveChanges(); }
@@ -55,6 +61,8 @@ public class LabContext : DbContext
   AddColumnIfMissing("LabTests","TestKey","TEXT NOT NULL DEFAULT ''");
   AddColumnIfMissing("LabResults","TestKey","TEXT NOT NULL DEFAULT ''");
   AddColumnIfMissing("PlannedTests","TestKey","TEXT NOT NULL DEFAULT ''");
+  AddColumnIfMissing("LabOrders","PatientAgeYears","INTEGER NULL");
+  AddColumnIfMissing("LabResults","AgeYears","INTEGER NULL");
   TranslateDemoNames();
   if (Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM AppMetadata WHERE Key = 'DemoSeedV1'").Single() == 0)
   {
@@ -66,6 +74,29 @@ public class LabContext : DbContext
    Database.ExecuteSqlRaw("UPDATE LabTests SET TestKey='name:' || Name WHERE TestKey=''");
    Database.ExecuteSqlRaw("UPDATE LabResults SET TestKey='name:' || TestName WHERE TestKey=''");
    Database.ExecuteSqlRaw("UPDATE PlannedTests SET TestKey='name:' || TestName WHERE TestKey=''");
+   MigrateAges();
+ }
+ private void MigrateAges()
+ {
+  if(Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM AppMetadata WHERE Key='AgeYearsV1'").Single()!=0) return;
+  using var transaction=Database.BeginTransaction();
+  Database.ExecuteSqlRaw("""
+   UPDATE LabOrders AS o SET PatientAgeYears=(
+    SELECT COALESCE(p.AgeYears,CASE WHEN date(p.BirthDate)<=date(o.CreatedAt) THEN
+     CAST(strftime('%Y',o.CreatedAt) AS INTEGER)-CAST(strftime('%Y',p.BirthDate) AS INTEGER)
+     -(strftime('%m-%d',o.CreatedAt)<strftime('%m-%d',p.BirthDate)) END)
+    FROM Patients AS p WHERE p.Id=o.PatientId) WHERE PatientAgeYears IS NULL
+   """);
+  Database.ExecuteSqlRaw("""
+   UPDATE LabResults AS r SET AgeYears=COALESCE(
+    (SELECT o.PatientAgeYears FROM OrderResults AS link JOIN LabOrders AS o ON o.Id=link.LabOrderId
+     WHERE link.LabResultId=r.Id ORDER BY link.Id LIMIT 1),
+    CASE WHEN date(r.BirthDate)<=date(r.CreatedAt) THEN
+     CAST(strftime('%Y',r.CreatedAt) AS INTEGER)-CAST(strftime('%Y',r.BirthDate) AS INTEGER)
+     -(strftime('%m-%d',r.CreatedAt)<strftime('%m-%d',r.BirthDate)) END) WHERE AgeYears IS NULL
+   """);
+  Database.ExecuteSqlRaw("INSERT INTO AppMetadata(Key,Value) VALUES('AgeYearsV1','1')");
+  transaction.Commit();
  }
  private void AddColumnIfMissing(string table,string column,string definition)
  {

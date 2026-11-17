@@ -22,7 +22,7 @@ public class ReportDesignTests
                 var highs = new[] { 10.0, 6.0, 17, 50, 96, 33, 36, 400, 14.5 };
                 var rows = names.Select((name, i) => new LabResult
                 {
-                    PatientId = 123, PatientName = "اسم المراجع", PatientSex = "ذكر", BirthDate = new DateTime(1998, 1, 1),
+                    PatientId = 123, PatientName = "اسم المراجع", PatientSex = "ذكر", AgeYears = 28,
                     TestName = name, Value = values[i], Unit = units[i], Low = lows[i], High = highs[i], Status = "ضمن النطاق"
                 }).ToList();
                 var doc = LabReport.Build(new LabSettings { Address = "بغداد", Phone = "07721280623" },
@@ -32,7 +32,10 @@ public class ReportDesignTests
                 Assert.Contains("Reference Range", text);
                 Assert.Contains("—", text);
                 Assert.Contains("اسم المراجع", uiText);
-                Assert.Contains("28 Years / Male", uiText);
+                Assert.Contains("Age:  28", uiText);
+                Assert.Contains("Gender:  Male", uiText);
+                Assert.DoesNotContain("Date of Birth", uiText);
+                Assert.DoesNotContain("Years", uiText);
                 Assert.DoesNotContain("Interpretation", text + uiText);
                 Assert.DoesNotContain("Lab Supervisor", text + uiText);
                 Assert.DoesNotContain("Ali Hassan", text + uiText);

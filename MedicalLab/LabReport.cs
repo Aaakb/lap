@@ -33,7 +33,7 @@ public static class LabReport
         var first = rows.First();
         var doc = CreateDocument(settings, true);
         doc.Blocks.Add(Header(settings, order));
-        doc.Blocks.Add(PatientCard(first.PatientId, first.PatientName, first.PatientSex, first.BirthDate, order.CreatedAt));
+        doc.Blocks.Add(PatientCard(first.PatientId, first.PatientName, first.PatientSex, first.AgeYears ?? PatientAge.FromBirthDate(first.BirthDate,order.CreatedAt)));
         doc.Blocks.Add(SectionHeading("Laboratory Test Results"));
         if (pending is { Count: > 0 }) AddPending(doc, pending);
         doc.Blocks.Add(ResultsTable(rows));
@@ -54,11 +54,12 @@ public static class LabReport
             doc.Blocks.Add(header);
             doc.Blocks.Add(new Paragraph(new Run("سجل المراجع")) { FontSize = 20, FontWeight = FontWeights.SemiBold, Foreground = Blue, KeepWithNext = true });
             var patient = history.Patient;
-            doc.Blocks.Add(PatientCard(patient.Id, patient.Name, patient.Sex, patient.BirthDate, DateTime.Today));
+            doc.Blocks.Add(PatientCard(patient.Id, patient.Name, patient.Sex, PatientAge.At(patient,DateTime.Today)));
             if (history.Orders.Count == 0) doc.Blocks.Add(new Paragraph(new Run("لا توجد طلبات مسجلة.")));
             foreach (var visit in history.Orders)
             {
-                doc.Blocks.Add(SectionHeading($"Order {visit.Order.PatientOrderNumber}  |  {visit.Order.CreatedAt:yyyy-MM-dd}"));
+                var visitAge=visit.Order.PatientAgeYears ?? visit.Results.FirstOrDefault()?.AgeYears ?? PatientAge.FromBirthDate(patient.BirthDate,visit.Order.CreatedAt);
+                doc.Blocks.Add(SectionHeading($"Order {visit.Order.PatientOrderNumber}  |  {visit.Order.CreatedAt:yyyy-MM-dd}  |  Age: {visitAge?.ToString(CultureInfo.InvariantCulture) ?? "—"}"));
                 if (visit.Results.Count == 0) doc.Blocks.Add(new Paragraph(new Run("لا توجد نتائج محفوظة.")));
                 else doc.Blocks.Add(ResultsTable(visit.Results));
                 if (visit.Pending.Count > 0) AddPending(doc, visit.Pending);
@@ -102,7 +103,7 @@ public static class LabReport
         return new BlockUIContainer(content) { Margin = new Thickness(0) };
     }
 
-    private static BlockUIContainer PatientCard(int id, string name, string sex, DateTime? birth, DateTime date)
+    private static BlockUIContainer PatientCard(int id, string name, string sex, int? age)
     {
         var content = new StackPanel();
         content.Children.Add(new Border
@@ -115,9 +116,9 @@ public static class LabReport
         fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); fields.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         void Add(TextBlock field, int column, int row) { field.Margin = new Thickness(4, 4, 4, 6); Grid.SetColumn(field, column); Grid.SetRow(field, row); fields.Children.Add(field); }
         Add(Field("الاسم:", name, true), 1, 0);
-        Add(Field("Age / Gender:", AgeAt(birth, date) + " / " + Patient.SexInEnglish(sex)), 0, 0);
+        Add(Field("Age:", age?.ToString(CultureInfo.InvariantCulture) ?? "—"), 0, 0);
         Add(Field("رقم المراجع:", id.ToString("D6", CultureInfo.InvariantCulture), true), 1, 1);
-        Add(Field("Date of Birth:", birth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "—"), 0, 1);
+        Add(Field("Gender:", Patient.SexInEnglish(sex)), 0, 1);
         content.Children.Add(fields);
         return new BlockUIContainer(new Border
         {
@@ -131,14 +132,6 @@ public static class LabReport
         var text = new TextBlock { FontSize = 16, Foreground = Ink, TextWrapping = TextWrapping.Wrap, FlowDirection = rtl ? FlowDirection.RightToLeft : FlowDirection.LeftToRight, Margin = new Thickness(0, 3, 0, 3) };
         text.Inlines.Add(new Run(label + "  ") { FontWeight = FontWeights.SemiBold }); text.Inlines.Add(new Run(value));
         return text;
-    }
-
-    private static string AgeAt(DateTime? birth, DateTime date)
-    {
-        if (birth is null || birth.Value.Date > date.Date) return "—";
-        var years = date.Year - birth.Value.Year;
-        if (birth.Value.Date > date.Date.AddYears(-years)) years--;
-        return years.ToString(CultureInfo.InvariantCulture) + " Years";
     }
 
     private static Paragraph SectionHeading(string text) => new(new Run(text))

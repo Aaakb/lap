@@ -39,10 +39,10 @@ public partial class MainWindow : Window
  private void TabChanged(object sender, SelectionChangedEventArgs e) { if (ready && e.Source == Tabs) RefreshAll(); }
  private Patient SavePatient()
  {
-  var sex=(SexInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? ""; Patient.ValidateRequired(NameInput.Text,BirthInput.SelectedDate,sex);
-  var input=Patient.Create(NameInput.Text,BirthInput.SelectedDate,sex);
+  var sex=(SexInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? ""; var age=Patient.ParseAge(AgeInput.Text);
+  var input=Patient.CreateWithAge(NameInput.Text,age,sex);
   using var db=new LabContext();
-  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المراجع غير موجود."); current.Name=input.Name;current.BirthDate=input.BirthDate;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
+  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المراجع غير موجود."); current.Name=input.Name;current.AgeYears=input.AgeYears;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
   db.SaveChanges(); return input;
  }
  private void AddPatient(object sender,RoutedEventArgs e)
@@ -120,9 +120,9 @@ public partial class MainWindow : Window
  private void PatientSelected(object sender, SelectionChangedEventArgs e)
  {
   if(PatientsGrid.SelectedItem is not Patient p) return;
-  patientEditingId=p.Id; NameInput.Text=p.Name; BirthInput.SelectedDate=p.BirthDate; SexInput.SelectedIndex=Patient.SexInEnglish(p.Sex)=="Male"?1:Patient.SexInEnglish(p.Sex)=="Female"?2:0;
+  patientEditingId=p.Id; NameInput.Text=p.Name; AgeInput.Text=p.AgeDisplay=="—"?"":p.AgeDisplay; SexInput.SelectedIndex=Patient.SexInEnglish(p.Sex)=="Male"?1:Patient.SexInEnglish(p.Sex)=="Female"?2:0;
  }
- private void NewPatient(object? sender,RoutedEventArgs? e) { patientEditingId=null; PatientsGrid.SelectedItem=null; NameInput.Clear(); BirthInput.SelectedDate=null; SexInput.SelectedIndex=0; }
+ private void NewPatient(object? sender,RoutedEventArgs? e) { patientEditingId=null; PatientsGrid.SelectedItem=null; NameInput.Clear(); AgeInput.Clear(); SexInput.SelectedIndex=0; }
  private void SearchPatients(object sender,TextChangedEventArgs e)
  {
   if(!ready) return;
@@ -138,7 +138,7 @@ public partial class MainWindow : Window
  {
   if(!ready || OrderChoice.SelectedItem is not LabOrder order) return;
   if((PatientChoice.SelectedItem as Patient)?.Id!=order.PatientId) return;
-  using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); ResultsGrid.ItemsSource=rows; var pendingNames=OrderWorkflow.PendingTests(db,order.Id,rows).Select(t=>t.TestName).ToList(); var patient=db.Patients.AsNoTracking().Single(p=>p.Id==order.PatientId); var available=db.LabTests.AsNoTracking().Where(t=>t.Active).ToList(); PendingGrid.ItemsSource=pendingNames.Select(name=> { var range=RangeSelector.Find(available.Where(t=>t.Name==name),patient.BirthDate,patient.Sex,order.CreatedAt.Date); return new PendingTestRow {Name=name,Kind=range is null?"Unavailable":range.IsText?"Text":"Number",Unit=range?.Unit ?? "",Reference=range is null?"No matching range":range.IsText?range.ExpectedText:$"{range.Low} - {range.High}"}; }).ToList(); PendingChoice.ItemsSource=pendingNames; PendingText.Text="التحاليل المنتظرة: "+(pendingNames.Count==0?"لا يوجد":string.Join("، ",pendingNames)); if(pendingNames.Count>0) PendingChoice.SelectedIndex=0; UpdateResultDetails(null,null);
+  using var db=new LabContext(); var ids=db.OrderResults.Where(x=>x.LabOrderId==order.Id).Select(x=>x.LabResultId); var rows=db.LabResults.AsNoTracking().Where(r=>ids.Contains(r.Id)).OrderByDescending(r=>r.Id).ToList(); ResultsGrid.ItemsSource=rows; var pendingNames=OrderWorkflow.PendingTests(db,order.Id,rows).Select(t=>t.TestName).ToList(); var patient=db.Patients.AsNoTracking().Single(p=>p.Id==order.PatientId); var available=db.LabTests.AsNoTracking().Where(t=>t.Active).ToList(); PendingGrid.ItemsSource=pendingNames.Select(name=> { var range=RangeSelector.FindForAge(available.Where(t=>t.Name==name),PatientAge.ForOrder(patient,order),patient.Sex); return new PendingTestRow {Name=name,Kind=range is null?"Unavailable":range.IsText?"Text":"Number",Unit=range?.Unit ?? "",Reference=range is null?"No matching range":range.IsText?range.ExpectedText:$"{range.Low} - {range.High}"}; }).ToList(); PendingChoice.ItemsSource=pendingNames; PendingText.Text="التحاليل المنتظرة: "+(pendingNames.Count==0?"لا يوجد":string.Join("، ",pendingNames)); if(pendingNames.Count>0) PendingChoice.SelectedIndex=0; UpdateResultDetails(null,null);
  } private void SaveSettings(object sender,RoutedEventArgs e)
  {
   if(string.IsNullOrWhiteSpace(LabNameInput.Text)) { MessageBox.Show("أدخل اسم المختبر."); return; }
@@ -213,8 +213,8 @@ public partial class MainWindow : Window
   if(PatientChoice.SelectedItem is not Patient selectedPatient || TestChoice.SelectedItem is not string name) {ResultDetails.Text="اختر المراجع والتحليل لعرض المرجع.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   using var db=new LabContext(); var patient=db.Patients.AsNoTracking().SingleOrDefault(p=>p.Id==selectedPatient.Id);
   if(patient is null) {ResultDetails.Text="بيانات المراجع غير موجودة.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
-  var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.Find(ranges,patient.BirthDate,patient.Sex,(OrderChoice.SelectedItem as LabOrder)?.CreatedAt.Date ?? DateTime.Today);
-  if(range is null) {ResultDetails.Text="لا يوجد نطاق مطابق؛ تحقق من تاريخ الميلاد والجنس ونطاقات التحليل.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
+  var ranges=db.LabTests.AsNoTracking().Where(t=>t.Active && t.Name==name).ToList(); var range=RangeSelector.FindForAge(ranges,PatientAge.ForOrder(patient,OrderChoice.SelectedItem as LabOrder),patient.Sex);
+  if(range is null) {ResultDetails.Text="لا يوجد نطاق مطابق؛ تحقق من العمر والجنس ونطاقات التحليل.";ResultDetails.FlowDirection=FlowDirection.RightToLeft;return;}
   ResultDetails.FlowDirection=FlowDirection.LeftToRight;
   ResultDetails.Text=range.IsText ? $"{name}  |  Text result  |  Reference: {(string.IsNullOrWhiteSpace(range.ExpectedText)?"—":range.ExpectedText)}" : $"{name}  |  Numeric result  |  Reference: {range.Low} - {range.High}  |  Unit: {range.Unit}";
  } private void ChooseTests(object sender,RoutedEventArgs e)
