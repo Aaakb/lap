@@ -13,10 +13,12 @@ public partial class MainWindow : Window
  private bool ready;
  private bool updatingPatients;
  private byte[]? pendingLogo;
+ private DateTime patientsListDay;
+ private readonly System.Windows.Threading.DispatcherTimer patientsDayTimer = new() { Interval = TimeSpan.FromSeconds(1) };
  public MainWindow()
  {
   InitializeComponent();
-  try { using var db = new LabContext(); db.Initialize(); ready=true; RefreshAll(); }
+  try { using var db = new LabContext(); db.Initialize(); ready=true; RefreshAll(); StartPatientsDayTimer(); }
   catch (Exception ex) { MessageBox.Show("تعذر فتح قاعدة البيانات: " + ex.Message, "خطأ", MessageBoxButton.OK, MessageBoxImage.Error); Close(); }
  }
  private void RefreshAll()
@@ -29,7 +31,7 @@ public partial class MainWindow : Window
   var settings=db.Settings.AsNoTracking().Single(); LabNameInput.Text=settings.Name; LabAddressInput.Text=settings.Address; LabPhoneInput.Text=settings.Phone; pendingLogo=settings.Logo; LogoStatus.Text=pendingLogo is null ? "لا يوجد شعار" : "تم اختيار شعار";
   var panels=db.Panels.AsNoTracking().OrderBy(p=>p.Name).ToList(); PanelsGrid.ItemsSource=panels; PanelChoice.ItemsSource=panels; AuditGrid.ItemsSource=db.AuditEntries.AsNoTracking().OrderByDescending(a=>a.Id).Take(500).ToList();
   var patients = db.Patients.AsNoTracking().OrderByDescending(p=>p.Id).ToList();
-  updatingPatients=true; PatientsGrid.ItemsSource = patients; PatientChoice.ItemsSource = patients;
+  updatingPatients=true; RefreshPatientsList(db); PatientChoice.ItemsSource = patients;
   PatientChoice.SelectedItem=patients.FirstOrDefault(p=>p.Id==selectedPatientId);
   var orders=OrderWorkflow.OrdersForPatient(db,selectedPatientId); OrderChoice.ItemsSource=orders; OrderChoice.SelectedItem=orders.FirstOrDefault(o=>o.Id==selectedOrderId); updatingPatients=false;
   var tests = db.LabTests.AsNoTracking().OrderBy(t=>t.Name).ThenBy(t=>t.MinAge).ToList();
@@ -42,7 +44,8 @@ public partial class MainWindow : Window
   var sex=(SexInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? ""; var age=Patient.ParseAge(AgeInput.Text);
   var input=Patient.CreateWithAge(NameInput.Text,age,sex);
   using var db=new LabContext();
-  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المراجع غير موجود."); current.Name=input.Name;current.AgeYears=input.AgeYears;current.Sex=input.Sex;input=current;} else db.Patients.Add(input);
+  if(patientEditingId is int id) {var current=db.Patients.Find(id) ?? throw new ArgumentException("المراجع غير موجود."); current.Name=input.Name;current.AgeYears=input.AgeYears;current.Sex=input.Sex;input=current;}
+  else { input.RegisteredAt = DateTime.Now; db.Patients.Add(input); }
   db.SaveChanges(); return input;
  }
  private void AddPatient(object sender,RoutedEventArgs e)
@@ -126,7 +129,33 @@ public partial class MainWindow : Window
  private void SearchPatients(object sender,TextChangedEventArgs e)
  {
   if(!ready) return;
-  using var db=new LabContext(); var term=PatientSearch.Text.Trim(); PatientsGrid.ItemsSource=db.Patients.AsNoTracking().Where(p=>p.Name.Contains(term) || p.Id.ToString()==term).OrderByDescending(p=>p.Id).ToList();
+  using var db = new LabContext();
+  RefreshPatientsList(db);
+ }
+ private void RefreshPatientsList(LabContext db)
+ {
+  var day = DateTime.Today;
+  PatientsGrid.ItemsSource = PatientDirectory.Load(db, day, PatientSearch.Text);
+  patientsListDay = day;
+ }
+ private void StartPatientsDayTimer()
+ {
+  patientsDayTimer.Tick += (_, _) =>
+  {
+   if (patientsListDay == DateTime.Today) return;
+   try
+   {
+    using var db = new LabContext();
+    RefreshPatientsList(db);
+   }
+   catch (Exception ex)
+   {
+    patientsDayTimer.Stop();
+    MessageBox.Show("تعذر تحديث قائمة اليوم: " + ex.Message);
+   }
+  };
+  Closed += (_, _) => patientsDayTimer.Stop();
+  patientsDayTimer.Start();
  }
  private void NewOrder(object sender,RoutedEventArgs e)
  {
@@ -236,8 +265,24 @@ public partial class MainWindow : Window
  private void PatientHistory(object sender,RoutedEventArgs e)
  {
   if(PatientsGrid.SelectedItem is not Patient patient){MessageBox.Show("اختر المراجع أولاً.");return;}
-  Tabs.SelectedItem=ResultsTab;RefreshAll();PatientChoice.SelectedItem=((IEnumerable<Patient>)PatientChoice.ItemsSource).FirstOrDefault(p=>p.Id==patient.Id);
-  if(OrderChoice.Items.Count>0)OrderChoice.SelectedIndex=0;else MessageBox.Show("لا توجد طلبات سابقة لهذا المراجع.");
+  using var db = new LabContext();
+  var visits = OrderWorkflow.OrdersForPatient(db, patient.Id)
+      .OrderByDescending(visit => visit.CreatedAt)
+      .ThenByDescending(visit => visit.Id)
+      .ToList();
+  if (visits.Count == 0)
+  {
+   MessageBox.Show("لا توجد زيارات مسجلة لهذا المراجع.");
+   return;
+  }
+
+  var window = new PatientVisitsWindow(patient, visits) { Owner = this };
+  if (window.ShowDialog() != true || window.SelectedVisit is not LabOrder visit) return;
+
+  Tabs.SelectedItem = ResultsTab;
+  RefreshAll();
+  PatientChoice.SelectedItem = PatientChoice.Items.OfType<Patient>().FirstOrDefault(p => p.Id == patient.Id);
+  OrderChoice.SelectedItem = OrderChoice.Items.OfType<LabOrder>().FirstOrDefault(o => o.Id == visit.Id);
  } private void PendingRowSelected(object sender,SelectionChangedEventArgs e)
  {
   if(!ready || PendingGrid.SelectedItem is not PendingTestRow row) return;

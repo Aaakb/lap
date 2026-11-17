@@ -6,6 +6,7 @@ public class Patient
     public string Name { get; set; } = "";
     public DateTime? BirthDate { get; set; }
     public int? AgeYears { get; set; }
+    public DateTime? RegisteredAt { get; set; }
     public string Sex { get; set; } = "";
     [System.ComponentModel.DataAnnotations.Schema.NotMapped] public string SexDisplay => SexInEnglish(Sex);
     [System.ComponentModel.DataAnnotations.Schema.NotMapped] public string AgeDisplay => PatientAge.At(this,DateTime.Today)?.ToString(CultureInfo.InvariantCulture) ?? "—";

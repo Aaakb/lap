@@ -38,6 +38,7 @@ public class LabContext : DbContext
   Database.EnsureCreated();
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Patients (Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT NOT NULL, BirthDate TEXT NULL, Sex TEXT NOT NULL)");
   AddColumnIfMissing("Patients","AgeYears","INTEGER NULL");
+  AddColumnIfMissing("Patients","RegisteredAt","TEXT NULL");
   Database.ExecuteSqlRaw("CREATE TABLE IF NOT EXISTS Settings (Id INTEGER PRIMARY KEY, Name TEXT NOT NULL, Address TEXT NOT NULL, Phone TEXT NOT NULL)");
   AddColumnIfMissing("Settings","Logo","BLOB NULL");
   if(!Settings.Any()) { Settings.Add(new LabSettings()); SaveChanges(); }
